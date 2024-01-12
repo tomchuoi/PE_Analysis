@@ -77,6 +77,20 @@ int main() {
 	while (importDescriptor->Name != 0) {
 		const char* moduleName = reinterpret_cast<const char*>(file_buffer + rawOffSet + importDescriptor->Name - import_section->VirtualAddress);
 		std::cout << "\t" << moduleName << std::endl;
+		
+		// Imported functions
+		PIMAGE_THUNK_DATA thunk = (PIMAGE_THUNK_DATA)(file_buffer + rawOffSet + importDescriptor->OriginalFirstThunk - import_section->VirtualAddress);
+		while (thunk->u1.AddressOfData != 0) {
+			// Checking if the function is imported by ordinal or by name
+			if (!(thunk->u1.Ordinal & IMAGE_ORDINAL_FLAG)) {
+				PIMAGE_IMPORT_BY_NAME importByName = (PIMAGE_IMPORT_BY_NAME)(file_buffer + rawOffSet + thunk->u1.AddressOfData - import_section->VirtualAddress);
+				std::cout << "\tImported Function: " << importByName->Name << std::endl;
+			}
+			else {
+				std::cout << "\tImported Ordinal: " << std::hex << IMAGE_ORDINAL(thunk->u1.Ordinal) << std::endl;
+			}
+			thunk++;
+		}
 		importDescriptor++;
 	}
 	delete[] file_buffer;
