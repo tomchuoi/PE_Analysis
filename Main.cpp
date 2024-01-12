@@ -2,7 +2,7 @@
 #include <iostream>
 
 int main() {
-	const char* filePath = "C:\\Program Files\\Common Files\\System\\wab32.dll";
+	const char* filePath = "C:\\Windows\\SysWOW64\\notepad.exe";  // This only works on 32bit portable executables files 🗿
 
 	HANDLE fileHandle = CreateFileA(filePath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 	if (fileHandle == INVALID_HANDLE_VALUE) {
