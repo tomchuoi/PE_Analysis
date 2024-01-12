@@ -31,8 +31,10 @@ int main() {
 	CloseHandle(fileHandle);
 
 	// Change the pointer type of file_buffer to suitable type to get the DOS Header
-	IMAGE_DOS_HEADER* dosHeader = reinterpret_cast<IMAGE_DOS_HEADER*>(file_buffer);
-
+	IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)(file_buffer);
+	PIMAGE_NT_HEADERS ntHeader = (PIMAGE_NT_HEADERS)(file_buffer + dosHeader->e_lfanew);
+	PIMAGE_SECTION_HEADER sectionHeader = IMAGE_FIRST_SECTION(ntHeader);
+	
 	// Checking for MZ Signature
 	if (dosHeader->e_magic != IMAGE_DOS_SIGNATURE) {
 		std::cerr << "That's not PE file!" << std::endl;
@@ -41,9 +43,6 @@ int main() {
 		return 1;
 	}
 	
-	// Looking for PE Header
-	IMAGE_NT_HEADERS* ntHeader = reinterpret_cast<IMAGE_NT_HEADERS*>(file_buffer + dosHeader -> e_lfanew);
-
 	std::cout << "Number of sections: " << ntHeader->FileHeader.NumberOfSections << std::endl;
 	std::cout << "PointertoEntryPoint: 0x" << std::hex << ntHeader->OptionalHeader.AddressOfEntryPoint << std::endl;
 	std::cout << "ImageBase: 0x>" << std::hex << ntHeader->OptionalHeader.ImageBase << std::endl;
@@ -53,7 +52,8 @@ int main() {
 	printf("FileAlignment: %d\n", ntHeader->OptionalHeader.FileAlignment);
 	printf("Size of Image: 0x%x\n", ntHeader->OptionalHeader.SizeOfImage);
 
-	IMAGE_SECTION_HEADER* sectionHeader =IMAGE_FIRST_SECTION(ntHeader);
+	DWORD importDirectoryRVA = ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress;
+	PIMAGE_SECTION_HEADER import_section = NULL;
 	for (int i = 0; i < ntHeader->FileHeader.NumberOfSections; i++) {
 		std::cout << "\nSection Name: " << sectionHeader[i].Name << std::endl;
 		std::cout << "Raw Size: " << std::dec << sectionHeader[i].SizeOfRawData << std::endl;
@@ -62,9 +62,24 @@ int main() {
 		std::cout << "VirtualSize: 0x" << std::hex << sectionHeader[i].Misc.VirtualSize << std::endl;
 		std::cout << "RawAddress: 0x" << std::hex << sectionHeader[i].PointerToRawData << std::endl;
 
+		if (importDirectoryRVA >= sectionHeader[i].VirtualAddress && importDirectoryRVA < sectionHeader[i].VirtualAddress + sectionHeader[i].Misc.VirtualSize) {
+			import_section = &sectionHeader[i];
+		}
 	}
 
-	delete[] file_buffer;
+	//DWORD imageBase = ntHeader->OptionalHeader.ImageBase;
+	DWORD rawOffSet = import_section->PointerToRawData;
+	
+	// Pointer point to the beginning of the import directory
+	PIMAGE_IMPORT_DESCRIPTOR importDescriptor = (PIMAGE_IMPORT_DESCRIPTOR)(
+		(DWORD)file_buffer + rawOffSet + importDirectoryRVA - import_section->VirtualAddress);
 
+	while (importDescriptor->Name != 0) {
+		const char* moduleName = reinterpret_cast<const char*>(file_buffer + rawOffSet + importDescriptor->Name - import_section->VirtualAddress);
+		std::cout << "\t" << moduleName << std::endl;
+		importDescriptor++;
+	}
+	delete[] file_buffer;
 	return 0;
 }
+
