@@ -4,7 +4,7 @@ This project is designed to understand of the Portable Executable (PE) file stru
 
 ## Features
   PE Parsing: This program extracts information from PE Headers, including sections, imported modules and more.
-  Shellcode Injection: Create new section in the PE file and inject shellcode into it.
+  Shellcode Injection: Create new section in the PE file and inject tcp reverse shell into it.
 
 ## Note
 This project is designed for educational purposes only.
