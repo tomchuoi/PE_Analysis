@@ -61,12 +61,12 @@ start:
     Push Offset newline
     Call printf
 
-  	Mov Ebx, Edi
-  	Add Ebx, 18H						; Move to OptionalHeader
-  	Mov OptionalHeader, Ebx
-  	Mov Esi, DWord Ptr [OptionalHeader]
-  	Add Esi, 1CH						; Move to the ImageBase field
-  	Mov Ecx, [Esi]
+    Mov Ebx, Edi
+    Add Ebx, 18H						; Move to OptionalHeader
+    Mov OptionalHeader, Ebx
+    Mov Esi, DWord Ptr [OptionalHeader]
+    Add Esi, 1CH						; Move to the ImageBase field
+    Mov Ecx, [Esi]
     Mov imageBase, Ecx
     Push imageBase
     Push Offset imageBaseMsg            ; Push format string for printf
@@ -94,7 +94,7 @@ error_exit:
     Call printf
 
 exit_program:
-	Call getchar
-	Invoke ExitProcess, 0
+    Call getchar
+    Invoke ExitProcess, 0
 
 end start
