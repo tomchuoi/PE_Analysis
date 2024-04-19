@@ -38,8 +38,8 @@ IMAGE_SCN_MEM_READ_CODE_EXECUTE    Equ 60000020H
     sectionAlignment	DD ?
     sizeOfImage			DD ?
 
-	newSection IMAGE_SECTION_HEADER<>
-	lastSection IMAGE_SECTION_HEADER <>
+    newSection IMAGE_SECTION_HEADER<>
+    lastSection IMAGE_SECTION_HEADER <>
 
 
 .Code
