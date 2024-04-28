@@ -1,4 +1,4 @@
-; This windows shellcode will pop up simple a message box
+; This windows shellcode will pop up a simple message box
 ; For that, it will do the following:
 ; Get base address of kernel32.dll
 ; Get the address of GetProcAddress
