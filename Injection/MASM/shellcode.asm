@@ -9,11 +9,6 @@
 
 Option CaseMap:None
 
-MB_OK Equ 0H
-.Data
-	caption DB "Test", 0
-	message DB "You've been hacked", 0
-
 .Code
 start:
 Assume Fs:Nothing
@@ -139,10 +134,21 @@ invokeFunction:
 	Call Edx					; GetProcAddress
 
 	; Invoke MessageBoxA
-	Push MB_OK
-	Push Offset caption
-	Push Offset message
-	Push 0
-	Call Eax
+	Add Esp, 0EH
+	Mov Ecx, 74736554H
+	Push Ecx
+	Mov Ecx, Esp						; ecx = caption
+	Xor Ebx, Ebx
+	Push Ebx
+	Push 64657463H
+	Push 65666E69H
+	Push 20746F67H
+	Push 20756F59H
+	Mov Edx, Esp						; edx = message
+	Push 0							; uType
+	Push Ecx						; lpCaption
+	Push Edx						; lpText
+	Push 0							; hWnd
+	Call Eax						; MessageBoxA
 
 End start
