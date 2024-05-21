@@ -11,4 +11,5 @@ This project is designed to understand the shellcode development, Portable Execu
 This project is designed for educational purposes only.
 
 ## How to use the reverse shell
-Start the listener on port 4444 on the attack machine using <p> nc -lvp 4444 </p>. Change the ip address of the attacker in the shellcode first.
+Start the listener on port 4444 on the attack machine <code> nc -lvp 4444 </code> 
+Make sure to change the ip address of the attacker in the shellcode first.
