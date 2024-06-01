@@ -4,7 +4,7 @@ This project is designed to understand the shellcode development, Portable Execu
 
 ## Features
   +  PE Parsing: This program extracts information from PE Headers, including sections, imported modules and more.
-  +  TCP reverse shell: A shellcode written in MASM that opens cmd.exe on target machine and redirects I/O stream to the attack machine. The shell dynamically find DLLs address and function calls to establish reverse connection.
+  +  TCP reverse shell: A shellcode written in MASM that opens cmd.exe on target machine, redirects I/O stream to the attack machine and adds itself to the registry keys for persistence. The shell dynamically find DLLs address and function calls to establish reverse connection.
   +  Shellcode Injection: Create new section in the PE file and inject tcp reverse shell into it.
 
 ## Note
