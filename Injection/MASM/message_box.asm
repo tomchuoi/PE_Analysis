@@ -41,7 +41,6 @@ Assume Fs:Nothing
 
 	; Get number of exported functions
 	Mov Ecx, [Eax + 14H]
-	Add Ecx, Ebx
 	Mov [Ebp - 4H], Ecx
 
 	; Get address of functions
@@ -91,24 +90,19 @@ getFunctionAddress:
 invokeFunction:
 	Xor Ecx, Ecx
 	Xor Edx, Edx
-	Mov Edx, Eax					; edx = GetProcAddress
-	Mov [Ebp - 14H], Ecx
-	Mov [Ebp - 14H], Edx
-	Push Ebx					; Kernel32 base address
-	Push Edx					; GetProcAddress
+	Mov Esi, Eax					; esi = GetProcAddress
 	Push Ecx
 	Push 41797261H					; aryA
 	Push 7262694CH					; Libr
 	Push 64616F4CH					; Load
 	Push Esp					; LoadLibraryA
 	Push Ebx
-	Call Edx					; Call GetProcAddress
+	Call Esi					; Call GetProcAddress
 
 	; The returned data is saved to eax register
 	; Load User32.dll using LoadLibraryA
 	Add Esp, 0CH					; Clear LoadLibraryA from the stack
 	Xor Ecx, Ecx
-	Push Eax					; LoadLibraryA address
 	Push Ecx
 	Mov Cx, 6C6CH					; ll
 	Push Ecx
@@ -120,7 +114,6 @@ invokeFunction:
 	; Get MessageBoxA address
 	Add Esp, 10H					; Clear user32.dll from the stack
 	Xor Ecx, Ecx
-	Mov Edx, [Ebp - 14H]
 	Push Eax					; user32.dll base address
 	Push Edx					; GetProcAddress
 	Push Ecx
@@ -131,7 +124,7 @@ invokeFunction:
 	Push 7373654DH
 	Push Esp 					; MessageBoxA
 	Push Eax					; user32.dll base address
-	Call Edx					; GetProcAddress
+	Call Esi					; GetProcAddress
 
 	; Invoke MessageBoxA
 	Add Esp, 0EH
