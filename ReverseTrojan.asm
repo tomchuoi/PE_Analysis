@@ -11,6 +11,7 @@
 .386
 Option CaseMap:None
 
+.Code
 start:
 payload:
 	Call get_eip
