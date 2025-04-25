@@ -12,7 +12,7 @@
 ;	[+] Hide API through hashing
 ;	[+] Unlinkling malicious Dll for anti-memory forensic
 ; This program uses API hashing to get function addresses, referenced from Stephen Fewer (stephen_fewer[at]harmonysecurity[dot]com).
-; Size: 1380 bytes
+; Size: 1405 bytes
 ;-------------------------------------------------------------------------------------------------------------------------------------;
 
 .386
