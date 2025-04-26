@@ -42,14 +42,14 @@ next:
 hash_api:
 	Pushad							; save all registers
 	Mov Ebp, Esp
-	Pushfd
-	Pop Eax
-	Mov [Ebp - 300H], Eax
-	Xor Edi, Edi
+	Pushfd					; Push EFLAGS value (that contains CF flag) into the stack
+	Pop Eax					; Pops the EFLAGS value off and stores it in eax
+	Mov [Ebp - 300H], Eax			; Save the EFLAGS value for later use
+	Xor Edi, Edi				; After this operation the EFLAGS will be reset back to 0, that's why we need to push it to the stack earlier 
 	Mov Edx, [Fs:30H + Edi]			; PEB
 	Mov Edx, [Edx + 0CH]			; PEB_LDR_DATA
 	Mov Edx, [Edx + 14H]			; First module in InMemoryOrderModuleList
-	Mov Edi, Edx					; Save the first position in the list
+	Mov Edi, Edx					; Save the first position in the InMemoryOrderModuleList
 
 find_next_unlink_dll:
 	Mov Edx, [Edx]					; get next module
@@ -77,6 +77,7 @@ uppercase:
 	Mov Eax, [Ebp - 300H]			; Move the EFLAGS to eax
 	And Eax, 1						; now eax = 1 if the CF is set, 0 if not
 	Cmp Al, 1
+
 	; Check if the flag stores in CF (Carry Flag) is 1 or not, if equal => unlink dll, else resolve api
 	Je unlink_module				; If CF = 1 then jump
 	Push Edx						; Push the current module to the stack for later use
@@ -180,7 +181,7 @@ unlink_module:
         Mov [ebx], eax
         Mov [Eax + 4H], Ebx
 
-        Clc							; Clear the flag
+        Clc							; Clear the CF flag
         Popad							; restore all register
 	Pop Ecx							; pop off the original return address
 	Pop Edx							; pop off the hash value that the caller have pushed
